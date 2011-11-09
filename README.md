@@ -32,4 +32,15 @@ based on Keystone with some modifications to provide the federation of object se
 
 ## Colony-Dispatcher
 
+Colony-Dispatcher is a proxy to
+
+* Relay requests to multiple object services (and merge response for clients)
+* Relay requests to a specific object service indicated by URI
+* LoadBalance - determine the nearest Swift proxy server to relay requests
+* User can use x-copy-from feature between different Swift services. 
+
 ## Colony-Utilities
+
+Tools to make admin task easier to provide the federation of object services
+
+* swift-ring-sync
