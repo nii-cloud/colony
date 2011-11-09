@@ -1,0 +1,28 @@
+{% load parse_date %}
+<table id="images" class="wide">
+  <tr>
+    <th>ID</th>
+    <th>Name</th>
+    <th>Created</th>
+    <th>Updated</th>
+    <th colspan="2">Status</th>
+  </tr>
+  {% for image in images %}
+  <tr class="{% cycle 'odd' 'even' %}">
+      <td>{{image.id}}</td>
+      <td>{{image.name}}</td>
+      <td>{{image.created_at|parse_date}}</td>
+      <td>{{image.updated_at|parse_date}}</td>
+      <td>{{image.status|capfirst}}</td>
+      <td id="actions">
+          <ul>
+      {% if image.owner == request.user.username %}
+            <li class="form">{% include "django_openstack/dash/images/_delete.html" with form=delete_form %}</li>
+            <li><a href="{% url dash_images_update request.user.tenant_id image.id %}">Edit</a></li>
+      {% endif %}
+            <li><a id="launch_{{image.id}}" class="launch" href="{% url dash_images_launch request.user.tenant_id image.id %}">Launch</a></li>
+          </ul>
+        </td>
+  </tr>
+  {% endfor %}
+</table>
