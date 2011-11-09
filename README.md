@@ -19,11 +19,9 @@ Colony consists of 4 components to provide the federation of object services
 
 based on Openstack Dashboard with some extra features
 
-* multi region support
-- User can choose which object service is used to store/retrieve objects among regions
+* multi region support - User can choose which object service is used to store/retrieve objects among regions
 * Swift ACL and Metadata support
-* Pluggable feature
-- Sysadmin can disable OpenStack compute service features to allow users only to use object services
+* Pluggable feature - Sysadmin can disable OpenStack compute service features to allow users only to use object services
 
 ## Colony-Keystone
 
