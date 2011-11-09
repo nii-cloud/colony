@@ -46,8 +46,10 @@ class Login(forms.SelfHandlingForm):
             return False
 
         try:
+            if data.get('region'):
+               request.session['region'] = data.get('region')
             if data.get('tenant'):
-                token = api.token_create(request,
+                token = api.token_create_with_region(request,
                                          data.get('tenant'),
                                          data['username'],
                                          data['password'])
@@ -59,7 +61,7 @@ class Login(forms.SelfHandlingForm):
                         tenant = t
             else:
                 # We are logging in without tenant
-                token = api.token_create(request,
+                token = api.token_create_with_region(request,
                                          '',
                                          data['username'],
                                          data['password'])
@@ -82,7 +84,7 @@ class Login(forms.SelfHandlingForm):
                     return
 
                 # Create a token
-                token = api.token_create_scoped_with_token(request,
+                token = api.token_create_scoped_with_token_and_region(request,
                                          data.get('tenant', tenant.id),
                                          token.id)
 
@@ -113,6 +115,11 @@ class LoginWithTenant(Login):
                        widget=forms.TextInput(attrs={'readonly': 'readonly'}))
     tenant = forms.CharField(widget=forms.HiddenInput())
 
+class LoginWithRegion(Login):
+    username = forms.CharField(max_length="20",
+                       widget=forms.TextInput(attrs={'readonly': 'readonly'}))
+    region = forms.CharField(widget=forms.HiddenInput())
+
 
 def login(request):
     if request.user and request.user.is_authenticated():
@@ -129,6 +136,18 @@ def login(request):
         'form': form,
     }, context_instance=template.RequestContext(request))
 
+
+def switch_regions(request, region_name):
+    form, handled = LoginWithRegion.maybe_handle(
+            request, initial={'region' : region_name,
+                              'username' : request.user.username})
+    if handled:
+        return handled
+
+    return shortcuts.render_to_response('switch_regions.html', {
+        'to_region' : region_name,
+        'form' : form,
+    }, context_instance=template.RequestContext(request))
 
 def switch_tenants(request, tenant_id):
     form, handled = LoginWithTenant.maybe_handle(

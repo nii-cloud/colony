@@ -35,9 +35,29 @@ def tenants(request):
                                   keystone: %s" % e.message)
         return {'tenants': []}
 
+def regions(request):
+    if not request.user or not request.user.is_authenticated():
+        return {}
+    try:
+        catalogs = request.user.service_catalog
+        results = []
+        for catalog in catalogs:
+            regions = [ api.Region(id=i+1, name=catalog['endpoints'][i]['region']) for i in range(len(catalog['endpoints'])) ]
+            for region in regions:
+                dupl = False
+                for result in results:
+                    if result.name == region.name:
+                        dupl = True
+                        break
+                if not dupl:
+                    results.append(region)
+        return {'regions' : results}
+    except KeyError:
+        return {'regions' : []}
 
 def swift(request):
     return {'swift_configured': settings.SWIFT_ENABLED}
+
 
 
 def quantum(request):

@@ -27,4 +27,6 @@ urlpatterns = patterns('django_openstack.auth.views',
     url(r'logout/$', 'logout', name='auth_logout'),
     url(r'switch/(?P<tenant_id>[^/]+)/$', 'switch_tenants',
         name='auth_switch'),
+    url(r'region/(?P<region_name>[^/]+)/$', 'switch_regions',
+        name='auth_region_switch'),
 )

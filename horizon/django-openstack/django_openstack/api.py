@@ -256,6 +256,15 @@ class SecurityGroupRule(APIResourceWrapper):
     """Simple wrapper around openstackx.extras.users.User"""
     _attrs = ['id', 'name', 'description', 'tenant_id', 'security_group_rules']
 
+class Region(object):
+    """Region"""
+    def __init__(self, id, name):
+        self.id = id
+        self.name = name
+
+    def __cmp__(self, obj):
+        return self.name == obj.name
+
 
 class SwiftAuthentication(object):
     """Auth container to pass CloudFiles storage URL and token from
@@ -280,21 +289,37 @@ class VirtualInterface(APIResourceWrapper):
 
 
 def get_service_from_catalog(catalog, service_type):
-    for service in catalog:
-        if service['type'] == service_type:
-            return service
+    if catalog:
+        for service in catalog:
+            if service['type'] == service_type:
+                return service
     return None
 
+def get_endpoint_index_by_region(request, service):
+    region = None
+    try:
+        region = request.session['region']
+    except KeyError:
+        pass
+    if not region:
+        return 0
+    for i in range(len(service['endpoints'])):
+        if service['endpoints'][i]['region'] == region:
+            return i
+    raise ServiceCatalogException('region not found')
+		
 
 def url_for(request, service_type, admin=False):
     catalog = request.user.service_catalog
     service = get_service_from_catalog(catalog, service_type)
     if service:
+        i = get_endpoint_index_by_region(request, service)
         try:
+            request.session['region'] = service['endpoints'][i]['region']
             if admin:
-                return service['endpoints'][0]['adminURL']
+                return service['endpoints'][i]['adminURL']
             else:
-                return service['endpoints'][0]['internalURL']
+                return service['endpoints'][i]['internalURL']
         except (IndexError, KeyError):
             raise ServiceCatalogException(service_type)
     else:
@@ -385,6 +410,15 @@ def novaclient(request):
     c.client.management_url=url_for(request, 'compute')
     return c
 
+
+def auth_api_with_request(request):
+    try:
+        url = url_for(request, 'auth')
+    except ServiceCatalogException, ex:
+        url = settings.OPENSTACK_KEYSTONE_URL
+
+    LOG.debug('auth_api_with_request using url %s' % url)
+    return openstackx.auth.Auth(management_url=url)
 
 def auth_api():
     LOG.debug('auth_api connection created using url "%s"' %
@@ -646,6 +680,11 @@ def token_create(request, tenant, username, password):
 def token_create_scoped_with_token(request, tenant, token):
     return Token(auth_api().tokens.create_scoped_with_token(tenant, token))
 
+def token_create_with_region(request, tenant, username, password):
+    return Token(auth_api_with_request(request).tokens.create(tenant, username, password))
+
+def token_create_scoped_with_token_and_region(request, tenant, token):
+    return Token(auth_api_with_request(request).tokens.create_scoped_with_token(tenant, token))
 
 def tenant_quota_get(request, tenant):
     return novaclient(request).quotas.get(tenant)

@@ -25,6 +25,10 @@
           <li><a href="{% url auth_switch tenant.id %}">{{tenant.name}}</a></li>
         {% endif %}
       {% endfor %}
+      <li class="title"><h4>Available Regions</h4></li>
+      {% for region in regions %}
+          <li><a href="{% url auth_region_switch region.name %}">{{region.name}}</a></li>
+      {% endfor %}
       <li id="sign_out"><a href="{% url auth_logout %}">Sign Out</a></li>
     </ul>
   </div>
