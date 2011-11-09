@@ -32,7 +32,7 @@ based on Keystone with some modifications to provide the federation of object se
 
 ## Colony-Dispatcher
 
-Colony-Dispatcher is a proxy to
+Colony-Dispatcher is a proxy that support following features
 
 * Relay requests to multiple object services (and merge response for clients)
 * Relay requests to a specific object service indicated by URI
