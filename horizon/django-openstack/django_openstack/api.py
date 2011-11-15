@@ -119,7 +119,7 @@ class APIDictWrapper(object):
 
 class Container(APIResourceWrapper):
     """Simple wrapper around cloudfiles.container.Container"""
-    _attrs = ['name']
+    _attrs = ['name', 'size_used', 'object_count', 'headers']
 
 
 class Console(APIResourceWrapper):
@@ -210,7 +210,7 @@ class Services(APIResourceWrapper):
 
 
 class SwiftObject(APIResourceWrapper):
-    _attrs = ['name']
+    _attrs = ['name', 'content_type', 'metadata', 'size', 'last_modified']
 
 
 class Tenant(APIResourceWrapper):
@@ -813,6 +813,17 @@ def swift_object_exists(request, container_name, object_name):
 def swift_get_containers(request):
     return [Container(c) for c in swift_api(request).get_all_containers()]
 
+def swift_get_container(request, name):
+    """ FIXME """
+    return Container(swift_api(request).get_container(name))
+
+def swift_set_container_info(request, name, hdrs):
+    response = swift_api(request).make_request('POST', [ name ], data='', hdrs=hdrs)
+    buff = response.read()
+
+    if (response.status != 204):
+       raise Exception('set Container info for %s failed.' % (name))
+    return True
 
 def swift_create_container(request, name):
     if swift_container_exists(request, name):
