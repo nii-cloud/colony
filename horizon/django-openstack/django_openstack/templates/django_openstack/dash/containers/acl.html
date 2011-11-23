@@ -88,14 +88,13 @@
      <h4>ACL Type:</h4>
        <tr><td>
      <div id="radio">
-       <input  type="radio" name="readacl" id="readacl" checked />
+       <input type="radio" name="readacl" id="readacl" />
        <label for="readacl">Read ACL</label>
        <input type="radio" name="writeacl" id="writeacl" />
        <label for="writeacl">Write ACL</label>
      </div></td>
        </tr>
        <tr><td>
-       <input type="textfield" />
       {% include 'django_openstack/dash/containers/_acl.html' with form=acl_form greeting="HI" %}
        </td></tr></table>
        <h4>Description:</h4>
@@ -111,7 +110,11 @@
         $("button", ".fuga").button({ 
         icons: {
            primary: "ui-icon-circle-close" }});
-        $("#radio").buttonset();
+        $("#radio").buttonset( {
+        icons: {
+           primary: "ui-icon-circle-close"
+           secondary: "ui-icon-circle-close" }
+        });
     })
   </script>
 

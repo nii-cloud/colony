@@ -7,5 +7,7 @@
     {{ field }}
   {% endfor %}
   <input name="container_name" type="hidden" value="{{container_name}}" />
+  <input name="read_acl" type="hidden" value="{{read_acl}}" />
+  <input name="write_acl" type="hidden" value="{{read_acl}}" />
   <input type="submit" value="Add ACL" class="large-rounded" />
 </form>

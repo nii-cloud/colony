@@ -119,6 +119,48 @@ class CopyObject(forms.SelfHandlingForm):
 
         return shortcuts.redirect(request.build_absolute_uri())
 
+class ObjectMeta(forms.SelfHandlingForm):
+    container_name = forms.CharField(widget=forms.HiddenInput())
+    object_name = forms.CharField(widget=forms.HiddenInput())
+    header_name = forms.CharField(max_length="255", label="Name")
+    header_value = forms.CharField(max_length="255", label="Value")
+
+    def __init__(self, *args, **kwargs):
+        super(ObjectMeta, self).__init__(*args, **kwargs)
+
+    def handle(self, request, data):
+        header = data['header_name']
+        value = data['header_value']
+        container_name = data['container_name']
+        object_name = data['object_name']
+
+        hdrs = {}
+        hdrs[header] = value
+
+        api.swift_set_object_info(request, container_name, object_name, hdrs)
+
+        return shortcuts.redirect(request.build_absolute_uri())
+
+class ObjectMetaRemove(forms.SelfHandlingForm):
+    container_name = forms.CharField(widget=forms.HiddenInput())
+    object_name = forms.CharField(widget=forms.HiddenInput())
+    header_name = forms.CharField(widget=forms.HiddenInput())
+
+    def __init__(self, *args, **kwargs):
+        super(ObjectMetaRemove, self).__init__(*args, **kwargs)
+
+    def handle(self, request, data):
+        header = data['header_name']
+        container_name = data['container_name']
+        object_name = data['object_name']
+
+        hdrs = {}
+        hdrs[header] = ''
+
+        api.swift_set_object_info(request, container_name, object_name, hdrs)
+
+        return shortcuts.redirect(request.build_absolute_uri())
+ 
 
 @login_required
 def index(request, tenant_id, container_name):
@@ -189,4 +231,31 @@ def copy(request, tenant_id, container_name, object_name):
         {'container_name': container_name,
          'object_name': object_name,
          'copy_form': form},
+        context_instance=template.RequestContext(request))
+
+
+@login_required
+def meta(request, tenant_id, container_name, object_name):
+
+    form, handled = ObjectMeta.maybe_handle(request)
+    if handled:
+        return handled
+
+    remove_form, handled = ObjectMetaRemove.maybe_handle(request)
+    if handled:
+        return handled
+
+    metadata = api.swift_get_object_info(request, container_name, object_name)
+
+    headers = []
+    for h, v in metadata.iteritems():
+        headers.append((h,v))
+    return render_to_response(
+        'django_openstack/dash/objects/meta.html',
+        {'container_name': container_name,
+         'object_name': object_name,
+         'metadata' : headers,
+         'meta_form' : form,
+         'remove_form' : remove_form
+        },
         context_instance=template.RequestContext(request))
