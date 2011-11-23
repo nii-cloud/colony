@@ -1,0 +1,10 @@
+<table id="containers" class="wide">
+  <tr>
+    <th>Name</th>
+  </tr>
+  {% for user in users %}
+  <tr class="{% cycle 'odd' 'even' %}">
+    <td>{{ user.name }}</td>
+  </tr>
+  {% endfor %}
+</table>

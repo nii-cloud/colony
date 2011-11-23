@@ -90,3 +90,13 @@ def create(request, tenant_id):
     'django_openstack/dash/containers/create.html', {
         'create_form': form,
     }, context_instance=template.RequestContext(request))
+
+
+@login_required
+def user_list(request, tenant_id):
+    users = api.users_list_for_token_and_tenant(request, request.user.token, tenant_id)
+    return shoftcuts.render_to_response(
+    'django_openstack/dash/containers/users.html', {
+        'users': users,
+    }, context_instance=template.RequestContext(request))
+
