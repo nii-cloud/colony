@@ -5,6 +5,7 @@
   {% for user in users %}
   <tr class="{% cycle 'odd' 'even' %}">
     <td>{{ user.name }}</td>
+    <td>{{ user.email }} </td>
   </tr>
   {% endfor %}
 </table>
