@@ -1,0 +1,120 @@
+{% extends 'django_openstack/dash/base.html' %}
+
+{% block sidebar %}
+  {% with current_sidebar="containers" %}
+    {{block.super}}
+  {% endwith %}
+{% endblock %}
+
+{% block page_header %}
+  {% include "django_openstack/common/_page_header.html" with title="Container ACL" %}
+{% endblock page_header %}
+
+{% block dash_main %}
+  <h3 class="container_name"><span>Container:</span> {{container_name}}</h3>
+
+  <div class="dash_block wide form">
+
+    <div class="left">
+      <h3>Set ACL:</h3>
+  <h4>Write ACL</h4>
+  <table id="containers" class="wide">
+    <tr>
+    <th>ACL</th>
+    <th>Action</th>
+    </tr>
+    {% for acl in write_acl_groups %}
+    <tr class="{%cycle 'odd' 'even' %}">
+    <td><div class='ui-icon ui-icon-person'></div>{{ acl }}</td>
+    <td id="actions" align="right" width="100px">
+      <div class="fuga">
+      <button style="font-size:10px">Remove</button>
+      </div>
+    </td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h4>Read ACL</h4>
+  <table id="containers" class="wide">
+    <tr>
+    <th>ACL</th>
+    <th>Action</th>
+    </tr>
+    {% for acl in read_acl_groups %}
+    <tr class="{%cycle 'odd' 'even' %}">
+    <td><div class='ui-icon ui-icon-person'></div>{{ acl }}</td>
+    <td id="actions" align="right" width="100px">
+      <div class="fuga">
+      <button style="font-size:10px">Remove</button>
+      </div>
+    </td>
+    </tr>
+    {% endfor %}
+    <tr class="{%cycle 'odd' 'even' %}">
+    {% for acl in read_acl_ref %}
+    <td><div class='ui-icon ui-icon-extlink'></div>{{ acl }}</td>
+    <td align="right" id="actions">
+      <div class="fuga">
+      <button style="font-size:10px">Remove</button>
+      </div>
+    </td>
+    </tr>
+    {% endfor %}
+  </table>
+
+    </div>
+
+    <div>
+    {% for object in objects %}
+    {{ object.name }}
+    {% endfor %}
+    </div>
+    <div class="right">
+  <table>
+     <p />
+     <p />
+     <p />
+     <p />
+     <p />
+     <p />
+     <p />
+     <p />
+     <p />
+     <p />
+     <p />
+     <p />
+     <p />
+     <h4>ACL Type:</h4>
+       <tr><td>
+     <div id="radio">
+       <input  type="radio" name="readacl" id="readacl" checked />
+       <label for="readacl">Read ACL</label>
+       <input type="radio" name="writeacl" id="writeacl" />
+       <label for="writeacl">Write ACL</label>
+     </div></td>
+       </tr>
+       <tr><td>
+       <input type="textfield" />
+      {% include 'django_openstack/dash/containers/_acl.html' with form=acl_form greeting="HI" %}
+       </td></tr></table>
+       <h4>Description:</h4>
+       <div class="ui-icon ui-icon-person"></div>ACL for account/user
+       <div class="ui-icon ui-icon-extlink"></div>ACL for referer
+    </div>
+    <div class="clear">&nbsp;</div>
+  </div>
+
+
+  <script>
+    $(function() {
+        $("button", ".fuga").button({ 
+        icons: {
+           primary: "ui-icon-circle-close" }});
+        $("#radio").buttonset();
+    })
+  </script>
+
+{% endblock %}
+
+

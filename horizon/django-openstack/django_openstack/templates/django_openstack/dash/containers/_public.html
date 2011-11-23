@@ -1,0 +1,12 @@
+<form id="public_html"  method="post">
+  {% csrf_token %}
+  {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+    {% for field in form.visible_fields %}
+    {{ field.id }}
+    {{ field.label_tag }}
+    {{ field.errors }}
+    {{ field }}
+  {% endfor %}
+  <input name="container_name" type="hidden" value="{{container_name}}" />
+  <input type="submit" value="Submit" class="large-rounded" />
+</form>
