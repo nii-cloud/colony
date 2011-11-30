@@ -30,7 +30,7 @@ from django import shortcuts
 
 from django_openstack import api
 from django_openstack import forms
-from django_openstack.utils import parse_acl, clean_acl
+from django_openstack.acl import parse_acl, clean_acl
 
 from cloudfiles.errors import ContainerNotEmpty
 
