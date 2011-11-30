@@ -28,7 +28,7 @@
   <ul class='sub_nav'>
     <li><a {% if current_sidebar == "images_metadata" %} class="active" {% endif %} href="{% url dash_images_metadata request.user.tenant_id %}">Image Metadata</a></li>
   </ul>
-  {% endif }
+  {% endif %}
  
   {% dash_sidebar_modules request %}
   
