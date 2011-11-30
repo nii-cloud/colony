@@ -3,6 +3,7 @@
 <div id='sidebar'>
   <h3>Manage Compute</h3>
   <ul class='sub_nav'>
+    {% if compute_configured %}
     <li><a {% if current_sidebar == "overview" %} class="active" {% endif %} href="{% url dash_overview %}">Overview</a></li>
     <li><a {% if current_sidebar == "instances" %} class="active" {% endif %} href="{% url dash_instances request.user.tenant_id %}">Instances</a></li>
     <li><a {% if current_sidebar == "images" %} class="active" {% endif %} href="{% url dash_images request.user.tenant_id %}">Images</a></li>
@@ -10,6 +11,7 @@
     <li><a {% if current_sidebar == "keypairs" %} class="active" {% endif %} href="{% url dash_keypairs request.user.tenant_id %}">Keypairs</a></li>
     <li><a {% if current_sidebar == "floatingips" %} class="active" {% endif %} href="{% url dash_floating_ips request.user.tenant_id %}">Floating IPs</a></li>
     <li><a {% if current_sidebar == "security_groups" %} class="active" {% endif %} href="{% url dash_security_groups request.user.tenant_id %}">Security Groups</a></li>
+    {% endif %}
     {% if quantum_configured %}
       <li><a {% if current_sidebar == "networks" %} class="active" {% endif %} href="{% url dash_networks request.user.tenant_id %}">Networks</a></li>
     {% endif %}

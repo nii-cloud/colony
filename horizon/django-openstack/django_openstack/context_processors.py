@@ -55,10 +55,14 @@ def regions(request):
     except KeyError:
         return {'regions' : []}
 
+def compute(request):
+    return {'compute_configured' : settings.OPENSTACK_COMPUTE_ENABLED}
+
 def swift(request):
     return {'swift_configured': settings.SWIFT_ENABLED}
 
-
-
 def quantum(request):
     return {'quantum_configured': settings.QUANTUM_ENABLED}
+
+def image_metadata_glance(request):
+    return {'image_metadata_glance' : settings.IMAGE_METADATA_GLANCE_ENABLED}

@@ -69,6 +69,8 @@ TEMPLATE_CONTEXT_PROCESSORS = (
     'django_openstack.context_processors.tenants',
     'django_openstack.context_processors.regions',
     'django_openstack.context_processors.quantum',
+    'django_openstack.context_processors.image_metadeata_glance',
+    'django_openstack.context_processors.compute'
 )
 
 TEMPLATE_LOADERS = (

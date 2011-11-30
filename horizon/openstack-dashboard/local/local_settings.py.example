@@ -15,6 +15,7 @@ DATABASES = {
 
 CACHE_BACKEND = 'dummy://'
 
+OPENSTACK_COMPUTE_ENABLED = True
 
 # Send email to the console by default
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
@@ -40,6 +41,8 @@ OPENSTACK_KEYSTONE_DEFAULT_ROLE = "Member"
 # NOTE(tres): Available services should come from the service
 #             catalog in Keystone.
 SWIFT_ENABLED = False
+
+IMAGE_METADATA_GLANCE_ENABLED = False
 
 # Configure quantum connection details for networking
 QUANTUM_ENABLED = True
