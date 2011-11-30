@@ -871,6 +871,15 @@ def swift_get_object_data(request, container_name, object_name):
     container = swift_api(request).get_container(container_name)
     return container.get_object(object_name).stream()
 
+def swift_set_object_info(request, container_name, object_name, meta):
+    container = swift_api(request).get_container(container_name)
+    object = container.get_object(object_name)
+    object.metadata.update(meta)
+    object.sync_metadata()
+
+def swift_get_object_info(request, container_name, object_name):
+    container = swift_api(request).get_container(container_name)
+    object = container.get_object(object_name)
 
 def quantum_list_networks(request):
     return quantum_api(request).list_networks()

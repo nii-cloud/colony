@@ -1,0 +1,65 @@
+{% extends 'django_openstack/dash/base.html' %}
+
+{% block sidebar %}
+  {% with current_sidebar="containers" %}
+    {{block.super}}
+  {% endwith %}
+{% endblock %}
+
+{% block page_header %}
+  {% include "django_openstack/common/_page_header.html" with title="Container Metadata" %}
+{% endblock page_header %}
+
+{% block dash_main %}
+
+  <div class="dash_block">
+  <h3 class="container_name"><span>Container:</span> {{container_name}}</h3>
+      <h3>Metadata:</h3>
+  <table id="containers" class="wide">
+    <tr>
+    <th>Name</th>
+    <th>Value</th>
+    <th>Action</th>
+    </tr>
+    {% for header,value in headers %}
+    <tr class="{%cycle 'odd' 'even' %}">
+    <td>{{ header  }}</td>
+    <td>{{ value }}</td>
+    <td id="actions" align="right" width="100px">
+      <div class="form" style="margin: 0">
+      {% include 'django_openstack/dash/containers/_meta_remove.html' with form=remove_form greeting="HI" %}
+      </div>
+    </td>
+    </tr>
+    {% endfor %}
+  </table>
+
+
+     <h4>Add Metadata to {{container_name}}:</h4>
+     <p>
+      {% include 'django_openstack/dash/containers/_meta.html' with form=meta_form greeting="HI" %}
+     </p>
+
+  <br />
+  <br />
+  <br />
+  <br />
+  <br />
+  <br />
+  <br />
+  <br />
+  </div>
+  <script>
+    $(function() {
+        $("button", ".fuga").button({ 
+        icons: {
+           primary: "ui-icon-circle-close" }});
+    }
+    )
+
+
+  </script>
+
+{% endblock %}
+
+
