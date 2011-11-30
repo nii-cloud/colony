@@ -28,7 +28,7 @@ based on Openstack Dashboard with some extra features
 based on Keystone with some modifications to provide the federation of object services.
 
 * In addition to %{tenant_id}, %{tenant_name} can be used for endpointTemplates
-
+* provide auth_token_for_colony.py middleware for swift
 
 ## Colony-Dispatcher
 
