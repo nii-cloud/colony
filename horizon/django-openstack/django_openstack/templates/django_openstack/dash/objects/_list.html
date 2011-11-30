@@ -1,17 +1,27 @@
 <table id="objects" class="wide">
   <tr>
     <th>Name</th>
+    <th>Status</th>
     <th style="width: 100px;">Actions</th>
   </tr>
   {% for object in objects %}
   <tr class="{% cycle 'odd' 'even' %}">
     <td>{{ object.name }}</td>
+    <td>
+      <ul>
+        <li style="margin: 0">{{ object.content_type }}</li>
+        <li style="margin: 0">{{ object.size|filesizeformat }}</li>
+        <li style="margin: 0">{{ object.last_modified }}</li>
+      </ul>
+    </td>
     <td id="actions">
       <ul>
-        <li><a href="{% url dash_object_copy request.user.tenant_id container_name object.name %}">Copy</a></li>
-        <li class="form">{% include "django_openstack/dash/objects/_delete.html" with form=delete_form %}</li>
-        <li><a href="{% url dash_objects_download request.user.tenant_id container_name object.name %}">Download</a>
-      </ul>
+      <ul>
+        <li style="margin: 0"><a href="{% url dash_object_copy request.user.tenant_id container_name object.name %}">Copy</a></li>
+        <li style="margin: 0" class="form">{% include "django_openstack/dash/objects/_delete.html" with form=delete_form %}</li>
+        <li style="margin: 0"><a href="{% url dash_objects_download request.user.tenant_id container_name object.name %}">Download</a>
+        <li style="margin: 0"><a href="{% url dash_objects_meta request.user.tenant_id container_name object.name %}">Metadata</a>
+      </ul> 
     </td>
   </tr>
   {% endfor %}
