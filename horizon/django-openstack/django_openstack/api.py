@@ -814,8 +814,32 @@ def swift_get_containers(request):
     return [Container(c) for c in swift_api(request).get_all_containers()]
 
 def swift_get_container(request, name):
-    """ FIXME """
-    return Container(swift_api(request).get_container(name))
+    swift_api(request)._check_container_name(name)
+    response = swift_api(request).make_request('HEAD', [ name ] )
+    count = size = None
+    headers = response.getheaders()
+    for hdr in headers:
+        if hdr[0].lower() == 'x-container-object-count':
+            try:
+                count = int(hdr[1])
+            except ValueError:
+                count = 0
+        if hdr[0].lower() == 'x-container-bytes-used':
+            try:
+                size = int(hdr[1])
+            except ValueError:
+                size = 0
+    buff = response.read()
+    if response.status == 404:
+        raise NoSuchContainer(name)
+    if (response.status < 200) or (response.status > 299):
+        raise ResponseError(response.status, response.reason)
+
+    c = cloudfiles.container.Container(swift_api(request), name, count, size)
+    c.headers = headers
+
+    return Container(c)
+
 
 def swift_set_container_info(request, name, hdrs):
     response = swift_api(request).make_request('POST', [ name ], data='', hdrs=hdrs)
