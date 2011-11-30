@@ -184,16 +184,6 @@ def index(request, tenant_id):
 
 
 @login_required
-def user_list(request, tenant_id):
-    users = api.users_list_for_token_and_tenant(request, request.user.token, tenant_id)
-    if not users:
-       users = [ { 'name' : 'hoge' , 'email' : 'test@test'} ]
-    return shortcuts.render_to_response(
-    'django_openstack/dash/containers/users.html', {
-        'users': users,
-    }, context_instance=template.RequestContext(request))
-
-@login_required
 def create(request, tenant_id):
     form, handled = CreateContainer.maybe_handle(request)
     if handled:
@@ -289,3 +279,12 @@ def acl(request, tenant_id, container_name):
         'write_acl' : write_acl,
         'read_acl' : read_acl
 	}, context_instance=template.RequestContext(request))
+
+@login_required
+def user_list(request, tenant_id):
+    users = api.users_list_for_token_and_tenant(request, request.user.token, tenant_id)
+    return shoftcuts.render_to_response(
+    'django_openstack/dash/containers/users.html', {
+        'users': users,
+    }, context_instance=template.RequestContext(request))
+

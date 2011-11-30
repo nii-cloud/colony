@@ -84,7 +84,7 @@ urlpatterns += patterns('django_openstack.dash.views.containers',
     url(OBJECTS % 'public', 'public', name='dash_containers_public'),
     url(OBJECTS % 'acl', 'acl', name='dash_containers_acl'),
     url(OBJECTS % 'meta', 'meta', name='dash_containers_meta'),
-    url(OBJECTS % 'user_list', 'user_list', name='dash_users_list'),
+    url(USERS % 'user_list', 'user_list', name='dash_users_list'),
 )
 
 urlpatterns += patterns('django_openstack.dash.views.objects',

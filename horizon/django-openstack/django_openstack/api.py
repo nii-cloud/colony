@@ -662,7 +662,7 @@ def tenant_list_for_token(request, token):
 def users_list_for_token_and_tenant(request, token, tenant):
     admin_account =  openstackx.extras.Account(
                      auth_token=token,
-                     management_url=settings.OPENSTACK_KEYSTONE_ADMIN_URL)
+                     management_url=url_for(request, 'identity', True))
     return [User(u) for u in admin_account.users.get_for_tenant(tenant)]
 
 
