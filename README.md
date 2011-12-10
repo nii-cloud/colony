@@ -3,7 +3,7 @@ Welcome to Colony project.
 
 # Introduction
 
-Colony is a project which federatea cloud services. The fisrt target is the federation of object services,
+Colony is a project which federate cloud services. The fisrt target is the federation of object services,
 like swift.
 
 # Features
