@@ -91,7 +91,7 @@ class CopyObject(forms.SelfHandlingForm):
     new_container_name = forms.ChoiceField(
         label="Container to store object in")
 
-    new_object_name = forms.CharField(max_length="255",
+    new_object_name = forms.CharField(max_length="1024",
                                       label="New object name")
     orig_container_name = forms.CharField(widget=forms.HiddenInput())
     orig_object_name = forms.CharField(widget=forms.HiddenInput())
@@ -122,8 +122,8 @@ class CopyObject(forms.SelfHandlingForm):
 class ObjectMeta(forms.SelfHandlingForm):
     container_name = forms.CharField(widget=forms.HiddenInput())
     object_name = forms.CharField(widget=forms.HiddenInput())
-    header_name = forms.CharField(max_length="255", label="Name")
-    header_value = forms.CharField(max_length="255", label="Value")
+    header_name = forms.CharField(max_length="128", label="Name")
+    header_value = forms.CharField(max_length="256", label="Value")
 
     def __init__(self, *args, **kwargs):
         super(ObjectMeta, self).__init__(*args, **kwargs)
