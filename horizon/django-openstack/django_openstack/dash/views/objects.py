@@ -248,8 +248,9 @@ def meta(request, tenant_id, container_name, object_name):
     metadata = api.swift_get_object_info(request, container_name, object_name)
 
     headers = []
-    for h, v in metadata.iteritems():
-        headers.append((h,v))
+    if metadata:
+        for h, v in metadata.iteritems():
+            headers.append((h,v))
     return render_to_response(
         'django_openstack/dash/objects/meta.html',
         {'container_name': container_name,
