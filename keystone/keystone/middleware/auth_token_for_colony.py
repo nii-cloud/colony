@@ -47,6 +47,19 @@ HTTP_AUTHORIZATION  : basic auth password used to validate the connection
 > What we add to the request for use by the OpenStack service
 HTTP_X_AUTHORIZATION: the client identity being passed in
 
+
+Swift Proxy Setting
+-------
+[pipeline:main]
+pipeline = healthcheck cache swift3 keystone proxy-server
+
+[filter:keystone]
+use = egg:keystone#tokenauth_colony
+keystone_url = http://172.30.112.168:5000
+region_name = RegionOne
+admin_role = Admin
+memcache_expire = 86400
+
 """
 
 import eventlet
@@ -55,6 +68,7 @@ import httplib
 import json
 import os
 from paste.deploy import loadapp
+from time import time
 from urlparse import urlparse
 from webob.exc import HTTPUnauthorized, HTTPUseProxy, HTTPForbidden, HTTPUnauthorized
 from webob import Request, Response
@@ -62,7 +76,7 @@ import keystone.tools.tracer  # @UnusedImport # module runs on import
 
 from keystone.common.bufferedhttp import http_connect_raw as http_connect
 from swift.common.middleware.acl import clean_acl, parse_acl, referrer_allowed
-from swift.common.utils import cache_from_env, split_path
+from swift.common.utils import cache_from_env, split_path, TRUE_VALUES
 
 PROTOCOL_NAME = "Token Authentication"
 
@@ -118,8 +132,22 @@ class AuthProtocol(object):
         """ Common initialization code """
 
         #TODO(ziad): maybe we refactor this into a superclass
-        self._init_protocol_common(app, conf)  # Applies to all protocols
-        self._init_protocol(conf)  # Specific to this protocol
+        #self._init_protocol_common(app, conf)  # Applies to all protocols
+        #self._init_protocol(conf)  # Specific to this protocol
+
+        # add by colony. conf tokens be simple.
+        self.conf = conf
+        self.app = app
+        keystone_url = conf.get('keystone_url')
+        parsed = urlparse(keystone_url)
+        self.auth_netloc = parsed.netloc
+        self.auth_protocol = parsed.scheme
+        self.auth_location = keystone_url
+        self.region_name = conf.get('region_name')
+        self.admin_role = conf.get('admin_role', 'Admin')
+        # for ACL setting for containers of an account which others possesses.
+        self.across_account = conf.get('across_account', 'yes').lower() in TRUE_VALUES
+        self.memcache_expire = float(conf.get('memcache_expire', 86400))
 
     def __call__(self, env, start_response):
         """ Handle incoming request. Authenticate. And send downstream. """
@@ -146,16 +174,39 @@ class AuthProtocol(object):
         #Look for authentication claims
         claims = self._get_claims(env)
         if not claims:
-            #No claim(s) provided
-            if self.delay_auth_decision:
-                #Configured to allow downstream service to make final decision.
-                #So mark status as Invalid and forward the request downstream
-                self._decorate_request("X_IDENTITY_STATUS",
-                    "Invalid", env, proxy_headers)
-            else:
-                #Respond to client as appropriate for this auth protocol
-                return self._reject_request(env, start_response)
-        else:
+            return self._reject_request(env, start_response)
+
+        # check auth token with no admin privilege. add by colony
+        result = self._accession_by_auth_token(env, claims)
+        if not result:
+            return self._reject_request(env, start_response)
+        tenant, username, roles, storage_url = result
+        self._decorate_request('X_AUTHORIZATION', "Proxy %s" %
+                               username, env, proxy_headers)
+        self._decorate_request('X_TENANT',
+                               tenant, env, proxy_headers)
+        self._decorate_request('X_USER',
+                               username, env, proxy_headers)
+        env['REMOTE_USER'] = '%s:%s,%s,%s' % \
+            (tenant, username, tenant, \
+                 'AUTH_%s' % tenant if self.admin_role in roles else '')
+        env['swift.authorize'] = self.authorize
+        env['swift.clean_acl'] = clean_acl
+        return self.app(env, start_response)
+
+        #Look for authentication claims
+        # claims = self._get_claims(env)
+        # if not claims:
+        #     #No claim(s) provided
+        #     if self.delay_auth_decision:
+        #         #Configured to allow downstream service to make final decision.
+        #         #So mark status as Invalid and forward the request downstream
+        #         self._decorate_request("X_IDENTITY_STATUS",
+        #             "Invalid", env, proxy_headers)
+        #     else:
+        #         #Respond to client as appropriate for this auth protocol
+        #         return self._reject_request(env, start_response)
+        # else:
         #     #this request is presenting claims. Let's validate them
         #     valid = self._validate_claims(claims)
         #     if not valid:
@@ -193,37 +244,10 @@ class AuthProtocol(object):
         #                         roles += role
         #                     self._decorate_request('X_ROLE',
         #                         roles, env, proxy_headers)
-
-        #             env['REMOTE_USER'] = '%s:%s,%s,%s' % \
-        #                 (claims['tenant'], claims['user'], claims['tenant'], \
-        #                      'AUTH_%s' % claims['tenant'] \
-        #                      if roles.split(',')[0] == 'Admin' else '')
-        #             env['swift.authorize'] = self.authorize
-        #             env['swift.clean_acl'] = clean_acl
-
         #             # NOTE(todd): unused
         #             self.expanded = True
         # #Send request downstream
         # return self._forward_request(env, start_response, proxy_headers)
-
-            # check auth token with no admin privilege. add by colony
-            req = Request(env)
-            result = self._accession_by_auth_token(req, claims)
-            if not result:
-                return self._reject_request(env, start_response)
-            auth_token, tenant, username, roles, storage_url = result
-            self._decorate_request('X_AUTHORIZATION', "Proxy %s" %
-                                   username, env, proxy_headers)
-            self._decorate_request('X_TENANT',
-                                   tenant, env, proxy_headers)
-            self._decorate_request('X_USER',
-                                   username, env, proxy_headers)
-            env['REMOTE_USER'] = '%s:%s,%s,%s' % \
-                (tenant, username, tenant, \
-                 'AUTH_%s' % tenant if 'Admin' in roles else '')
-            env['swift.authorize'] = self.authorize
-            env['swift.clean_acl'] = clean_acl
-        return self.app(env, start_response)
 
     # NOTE(todd): unused
     def get_admin_auth_token(self, username, password):
@@ -387,8 +411,8 @@ class AuthProtocol(object):
         tenant, user, password = auth_user
         auth_req = {'auth': {'passwordCredentials': {'username': user, 'password': password}}}
         req_headers = {"Content-type": "application/json", "Accept": "text/json"}
-        connect = httplib.HTTPConnection if self.service_protocol == 'http' else httplib.HTTPSConnection
-        conn = connect('%s:%s' % (self.auth_host, self.auth_port))
+        connect = httplib.HTTPConnection if self.auth_protocol == 'http' else httplib.HTTPSConnection
+        conn = connect('%s' % self.auth_netloc)
         conn.request('POST', '/v2.0/tokens', json.dumps(auth_req), req_headers)
         resp = conn.getresponse()
         #print resp.status
@@ -396,7 +420,7 @@ class AuthProtocol(object):
             return None
         data = resp.read()
         auth_resp = json.loads(data)
-        auth_token, auth_tenant, username, roles, storage_url = self._get_swift_info(auth_resp, 'RegionOne') 
+        auth_token, auth_tenant, username, roles, storage_url = self._get_swift_info(auth_resp, self.region_name) 
         if auth_tenant != tenant:
             return None
         if not storage_url:
@@ -445,17 +469,28 @@ class AuthProtocol(object):
         return auth_token, auth_tenant, username, roles, storage_url  
 
 
-    def _accession_by_auth_token(self, req, auth_token):
+    def _accession_by_auth_token(self, env, auth_token):
         """
         add by colony.
         """
+        req = Request(env)
+        memcache_client = cache_from_env(env)
+
+        #get memcache
+        if memcache_client:
+            memcache_key = 'auth/%s' % auth_token
+            cached_auth_data = memcache_client.get(memcache_key)
+            if cached_auth_data:
+                expires, tenant, username, roles, storage_url = cached_auth_data
+                if expires > time():
+                    if not self.across_account and not self.valid_account_owner(req, tenant):
+                        return None
+                    return tenant, username, roles, storage_url
+
         token = {'auth': {'token': {'id': auth_token}, 'tenantId': ''}}
         req_headers = {'Content-type': 'application/json', 'Accept': 'text/json'}
-        if  self.service_protocol == 'http':
-            connect = httplib.HTTPConnection
-        else:
-            connect = httplib.HTTPSConnection
-        conn = connect('%s:%s' % (self.auth_host, self.auth_port))
+        connect = httplib.HTTPConnection if self.auth_protocol == 'http' else httplib.HTTPSConnection
+        conn = connect('%s' % self.auth_netloc)
         conn.request('POST', '/v2.0/tokens', json.dumps(token), req_headers)
         resp = conn.getresponse()
         if resp.status == 200:
@@ -463,16 +498,30 @@ class AuthProtocol(object):
         else:
             return None
         auth_resp = json.loads(data)
-        verified_auth_token, tenant, username, roles, storage_url = self._get_swift_info(auth_resp, 'RegionOne') 
-        #print req.url
-        #print auth_resp
-        parsed = urlparse(req.url)
-        #print '%s:%s' % (tenant, username)
-        #print parsed.path
+        verified_auth_token, tenant, username, roles, storage_url = \
+            self._get_swift_info(auth_resp, self.region_name) 
         if auth_token != verified_auth_token:
             return None
-        return verified_auth_token, tenant, username, roles, storage_url
-        
+
+        # set memcache
+        if memcache_client:
+            memcache_client.set(memcache_key,
+                                (time() + self.memcache_expire, 
+                                 tenant, username, roles, storage_url),
+                                timeout=self.memcache_expire)
+
+        if not self.across_account and not self.valid_account_owner(req, tenant):
+            return None
+        return tenant, username, roles, storage_url
+
+
+    def valid_account_owner(self, req, tenant):
+        """
+        add by colony.
+        """
+        parsed = urlparse(req.url)
+        return '/'.join(parsed.path.split('/')[:3]) == '/v1.0/AUTH_%s' % tenant
+
 
     def authorize(self, req):
         """ 
