@@ -86,8 +86,8 @@ class ContainerMetaRemove(forms.SelfHandlingForm):
 class ContainerMeta(forms.SelfHandlingForm):
     ''' Form that handles Swift Container Meta Data '''
     container_name = forms.CharField(widget=forms.HiddenInput())
-    header_name = forms.CharField(max_length="255", label='Name', required=True)
-    header_value = forms.CharField(max_length="255", label="Value", required=True)
+    header_name = forms.CharField(max_length="128", label='Name', required=True)
+    header_value = forms.CharField(max_length="256", label="Value", required=True)
     
     def __init__(self, *args, **kwargs):
         super(ContainerMeta, self).__init__(*args, **kwargs)
