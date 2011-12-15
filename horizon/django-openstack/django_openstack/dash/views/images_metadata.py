@@ -46,6 +46,14 @@ from novaclient import exceptions as novaclient_exceptions
 LOG = logging.getLogger('django_openstack.dash.views.images_metadata')
 
 
+class UploadMetadata(forms.SelfHandlingForm):
+    image_meta_file = forms.FileField(label="Image Metadata File")
+
+    def handle(self, request, data):
+        data = self.files['image_meta_file'].read()
+        messages.success(request, "Image Metadata was successfully registerd")
+        return shortcuts.redirect(request.build_absolute_uri())
+
 class LaunchForm(forms.SelfHandlingForm):
     name = forms.CharField(max_length=80, label="Server Name")
     image_id = forms.CharField(widget=forms.HiddenInput())
@@ -178,3 +186,13 @@ def download(request, tenant_id, image_id):
 
     return response
 
+@login_required
+def upload(request, tenant_id):
+    form, handled = UploadMetadata.may_be_handle(request)
+    if handled:
+        return handled
+
+    return render_to_response(
+    'django_openstack/dash/images_metadata/upload.html', {
+       'upload_form': form,
+    |, context_instance=template.RequestContext(request))
