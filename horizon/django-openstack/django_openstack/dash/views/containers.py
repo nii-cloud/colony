@@ -104,6 +104,19 @@ class ContainerMeta(forms.SelfHandlingForm):
 
         return shortcuts.redirect(request.build_absolute_uri())
 
+class ContainerAclRemove(forms.SelfHandlingForm):
+    container_name = forms.CharField(widget=forms.HiddenInput())
+    header_name = forms.CharField(widget=forms.HiddenInput())
+
+    def __init__(self, *args, **kwargs):
+        super(ContainerAclRemove, self).__init__(*args, **kwargs)
+
+    def handle(self, request, data):
+        header = data['header_name']
+        container_name = data['container_name']
+
+        return shortcuts.redirect(request.build_absolute_uri())
+
 class ContainerAcl(forms.SelfHandlingForm):
     ''' Form that handles Swift Container Acl '''
     container_name = forms.CharField(widget=forms.HiddenInput())
@@ -135,9 +148,7 @@ class ContainerAcl(forms.SelfHandlingForm):
 
         hdrs = {}
         hdrs[type] = ','.join(group_result + ref_result)
-        messages.error(request, hdrs)
         api.swift_set_container_info(request, container_name, hdrs)
-
        
         return shortcuts.redirect(request.build_absolute_uri()) 
 
