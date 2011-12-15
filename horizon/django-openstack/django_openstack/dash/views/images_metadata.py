@@ -149,64 +149,32 @@ def index(request, tenant_id):
         'images': images,
     }, context_instance=template.RequestContext(request))
 
-
 @login_required
-def launch(request, tenant_id, image_id):
-    def flavorlist():
-        try:
-            fl = api.flavor_list(request)
-
-            # TODO add vcpu count to flavors
-            sel = [(f.id, '%s (%svcpu / %sGB Disk / %sMB Ram )' %
-                   (f.name, f.vcpus, f.disk, f.ram)) for f in fl]
-            return sorted(sel)
-        except api_exceptions.ApiException:
-            LOG.exception('Unable to retrieve list of instance types')
-            return [(1, 'm1.tiny')]
-
-    def keynamelist():
-        try:
-            fl = api.keypair_list(request)
-            sel = [(f.name, f.name) for f in fl]
-            return sel
-        except api_exceptions.ApiException:
-            LOG.exception('Unable to retrieve list of keypairs')
-            return []
-
-    def securitygrouplist():
-        try:
-            fl = api.security_group_list(request)
-            sel = [(f.name, f.name) for f in fl]
-            return sel
-        except novaclient_exceptions.ClientException, e:
-            LOG.exception('Unable to retrieve list of security groups')
-            return []
-
-    # TODO(mgius): Any reason why these can't be after the launchform logic?
-    # If The form is valid, we've just wasted these two api calls
-    image = api.image_get(request, image_id)
-    tenant = api.token_get_tenant(request, request.user.tenant_id)
-    quotas = api.tenant_quota_get(request, request.user.tenant_id)
+def download(request, tenant_id, image_id):
+    image = None
     try:
-        quotas.ram = int(quotas.ram) / 100
-    except Exception, e:
-        messages.error(request, 'Error parsing quota  for %s: %s' %
-                                 (image_id, e.message))
-        return redirect('dash_instances', tenant_id)
+        image = api.image_get(request, image_id)
+    except glance_exception.ClientConnectionError, e:
+        LOG.exception("Error connecting to glance")
+        messages.error(request, "Error connecting to glance: %s" % str(e))
+    except glance_exception.Error, e:
+        LOG.exception("Error retrieving image list")
+        messages.error(request, "Error retrieving image list: %s" % str(e))
+    except api_exceptions.ApiException, e:
+        msg = "Unable to retreive image info from glance: %s" % str(e)
+        LOG.exception(msg)
+        messages.error(request, msg)
 
-    form, handled = LaunchForm.maybe_handle(
-            request, initial={'flavorlist': flavorlist(),
-                              'keynamelist': keynamelist(),
-                              'securitygrouplist': securitygrouplist(),
-                              'image_id': image_id,
-                              'tenant_id': tenant_id})
-    if handled:
-        return handled
+    if not image:
+        return
 
-    return render_to_response(
-    'django_openstack/dash/images/launch.html', {
-        'tenant': tenant,
-        'image': image,
-        'form': form,
-        'quotas': quotas,
-    }, context_instance=template.RequestContext(request))
+    response = http.HttpResponse()
+    response['Content-Disposition'] = 'attachment; filename=image-%s.xml' % image.name
+    response.write("
+        <image>
+           <name>%s</name>
+        </image>
+    ")
+
+    return response
+
