@@ -116,7 +116,28 @@ class ContainerAcl(forms.SelfHandlingForm):
 
     def handle(self, request, data):
         container_name = data['container_name']
-        acl = clean_acl('X-Container-Read', data['acl_add'])
+        read_acl = True
+        if read_acl:
+           type = 'X-Container-Read'
+           acl_value = data['read_acl']
+        else:
+           type = 'X-Container-Write'
+           acl_value = data['write_acl']
+
+        acl = clean_acl(type, data['acl_add'])
+        acl_orig = clean_acl(type, acl_value)
+        group_add, ref_add = parse_acl(acl)
+        group_orig, ref_orig = parse_acl(acl_orig)
+
+        group_result = group_add + group_orig
+        ref_result = ref_add + ref_orig
+
+
+        hdrs = {}
+        hdrs[type] = ','.join(group_result + ref_result)
+        messages.error(request, hdrs)
+        api.swift_set_container_info(request, container_name, hdrs)
+
        
         return shortcuts.redirect(request.build_absolute_uri()) 
 
@@ -283,7 +304,7 @@ def acl(request, tenant_id, container_name):
 @login_required
 def user_list(request, tenant_id):
     users = api.users_list_for_token_and_tenant(request, request.user.token, tenant_id)
-    return shoftcuts.render_to_response(
+    return shortcuts.render_to_response(
     'django_openstack/dash/containers/users.html', {
         'users': users,
     }, context_instance=template.RequestContext(request))
