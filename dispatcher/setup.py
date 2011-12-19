@@ -33,5 +33,8 @@ setup(name='dispatcher',
         'paste.filter_factory': [
             'keystone_merge=dispatcher.common.middleware.keystone_merge:filter_factory',
             ],
+        'paste.filter_factory': [
+            'swift3_for_colony=dispatcher.common.middleware.swift3:filter_factory',
+            ],
         },
       )
