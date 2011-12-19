@@ -593,11 +593,23 @@ class AuthProtocol(object):
     def _s3_auth(self, env, token):
         """
         add by colony
+
+        AWS S3 API support. co-working with swift3.py.
+
+        Authorization header is assumed,
+         'AWS account:user:password:sign'
+        like 'Authorization: AWS test:tester:testing:ZqDmuA7PLBtw6Qrl/nJWLyGX5Ck='
+
+        in s3curl as:
+        $ s3curl.pl --id test:tester:testing --key testing -- http://192.168.2.1:8080/TEST0
+
         """
         account = env['HTTP_AUTHORIZATION'].split(' ')[1]
-        tenant, user, sign = account.split(':')
+        try:
+            tenant, user, password, sign = account.split(':')
+        except ValueError:
+            return None
         msg = base64.urlsafe_b64decode(unquote(token))
-        password = 'testing'
         s = base64.encodestring(hmac.new(password, msg, sha1).digest()).strip()
         # print 'tenant: %s, user: %s, sign: %s' % (tenant, user, sign)
         # print 'msg: %s' % msg
