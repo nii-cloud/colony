@@ -64,11 +64,15 @@ memcache_expire = 86400
 
 import eventlet
 from eventlet import wsgi
+import base64
+from hashlib import md5, sha1
+import hmac
 import httplib
 import json
 import os
 from paste.deploy import loadapp
 from time import time
+from urllib import unquote
 from urlparse import urlparse
 from webob.exc import HTTPUnauthorized, HTTPUseProxy, HTTPForbidden, HTTPUnauthorized
 from webob import Request, Response
@@ -176,8 +180,13 @@ class AuthProtocol(object):
         if not claims:
             return self._reject_request(env, start_response)
 
-        # check auth token with no admin privilege. add by colony
-        result = self._accession_by_auth_token(env, claims)
+        # s3 support. add by colony
+        s3 = env.get('HTTP_AUTHORIZATION')
+        if s3:
+            result = self._s3_auth(env, claims)
+        else:
+            # check auth token with no admin privilege. add by colony
+            result = self._accession_by_auth_token(env, claims)
         if not result:
             return self._reject_request(env, start_response)
         tenant, username, roles, storage_url = result
@@ -409,17 +418,7 @@ class AuthProtocol(object):
         add by colony.
         """
         tenant, user, password = auth_user
-        auth_req = {'auth': {'passwordCredentials': {'username': user, 'password': password}}}
-        req_headers = {"Content-type": "application/json", "Accept": "text/json"}
-        connect = httplib.HTTPConnection if self.auth_protocol == 'http' else httplib.HTTPSConnection
-        conn = connect('%s' % self.auth_netloc)
-        conn.request('POST', '/v2.0/tokens', json.dumps(auth_req), req_headers)
-        resp = conn.getresponse()
-        #print resp.status
-        if resp.status != 200:
-            return None
-        data = resp.read()
-        auth_resp = json.loads(data)
+        auth_resp = self._authreq_to_keystone(user, password)
         auth_token, auth_tenant, username, roles, storage_url = self._get_swift_info(auth_resp, self.region_name) 
         if auth_tenant != tenant:
             return None
@@ -430,6 +429,22 @@ class AuthProtocol(object):
                    'X-Storage-Token': auth_token, 'Content-Length': len(body)}
         return headers, body
 
+
+    def _authreq_to_keystone(self, user, password):
+        """ 
+        add by colony.
+        """
+        auth_req = {'auth': {'passwordCredentials': {'username': user, 'password': password}}}
+        req_headers = {"Content-type": "application/json", "Accept": "text/json"}
+        connect = httplib.HTTPConnection if self.auth_protocol == 'http' else httplib.HTTPSConnection
+        conn = connect('%s' % self.auth_netloc)
+        conn.request('POST', '/v2.0/tokens', json.dumps(auth_req), req_headers)
+        resp = conn.getresponse()
+        #print resp.status
+        if resp.status != 200:
+            return None
+        data = resp.read()
+        return json.loads(data)
 
     def _get_auth_user(self, env):
         """
@@ -573,6 +588,42 @@ class AuthProtocol(object):
             return HTTPForbidden(request=req)
         else:
             return HTTPUnauthorized(request=req)
+
+
+    def _s3_auth(self, env, token):
+        """
+        add by colony
+
+        AWS S3 API support. co-working with swift3.py.
+
+        Authorization header is assumed,
+         'AWS account:user:password:sign'
+        like 'Authorization: AWS test:tester:testing:ZqDmuA7PLBtw6Qrl/nJWLyGX5Ck='
+
+        in s3curl as:
+        $ s3curl.pl --id test:tester:testing --key testing -- http://192.168.2.1:8080/TEST0
+
+        """
+        account = env['HTTP_AUTHORIZATION'].split(' ')[1]
+        try:
+            tenant, user, password, sign = account.split(':')
+        except ValueError:
+            return None
+        msg = base64.urlsafe_b64decode(unquote(token))
+        s = base64.encodestring(hmac.new(password, msg, sha1).digest()).strip()
+        # print 'tenant: %s, user: %s, sign: %s' % (tenant, user, sign)
+        # print 'msg: %s' % msg
+        # print 'sign: %s' % sign
+        # print 's: %s' % s
+        if sign != s:
+            return None
+        auth_resp = self._authreq_to_keystone(user, password)
+        auth_token, auth_tenant, username, roles, storage_url = self._get_swift_info(auth_resp, self.region_name) 
+        if auth_tenant != tenant:
+            return None
+        if not storage_url:
+            return None
+        return tenant, username, roles, storage_url 
 
 
 def filter_factory(global_conf, **local_conf):
