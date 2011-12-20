@@ -152,7 +152,6 @@ def canonical_string(req):
             if key in ('acl', 'logging', 'torrent', 'location',
                        'requestPayment'):
                 return "%s%s?%s" % (buf, path, key)
-    print '%s %s' % (buf, path)
     return buf + path
 
 
@@ -169,11 +168,13 @@ class ServiceController(Controller):
     """
     Handles account level requests.
     """
-    def __init__(self, env, app, account_name, token, **kwargs):
+    def __init__(self, env, app, account_name, token, path, **kwargs):
         Controller.__init__(self, app)
         env['HTTP_X_AUTH_TOKEN'] = token
-        #env['PATH_INFO'] = '/v1/%s' % account_name
-        env['PATH_INFO'] = '/v1.0/AUTH_%s' % account_name.split(':')[0]
+        if path:
+            env['PATH_INFO'] = path
+        else:
+            env['PATH_INFO'] = '/v1.0/AUTH_%s' % account_name.split(':')[0]
 
     def GET(self, env, start_response):
         """
@@ -209,14 +210,16 @@ class BucketController(Controller):
     """
     Handles bucket request.
     """
-    def __init__(self, env, app, account_name, token, container_name,
+    def __init__(self, env, app, account_name, token, path, container_name,
                     **kwargs):
         Controller.__init__(self, app)
         self.container_name = unquote(container_name)
         self.account_name = unquote(account_name)
         env['HTTP_X_AUTH_TOKEN'] = token
-        #env['PATH_INFO'] = '/v1/%s/%s' % (account_name, container_name)
-        env['PATH_INFO'] = '/v1.0/AUTH_%s/%s' % (account_name.split(':')[0], container_name)
+        if path:
+            env['PATH_INFO'] = '%s/%s' % (path, container_name)
+        else:
+            env['PATH_INFO'] = '/v1.0/AUTH_%s/%s' % (account_name.split(':')[0], container_name)
 
     def GET(self, env, start_response):
         """
@@ -329,15 +332,17 @@ class ObjectController(Controller):
     """
     Handles requests on objects
     """
-    def __init__(self, env, app, account_name, token, container_name,
+    def __init__(self, env, app, account_name, token, path, container_name,
                     object_name, **kwargs):
         Controller.__init__(self, app)
         self.account_name = unquote(account_name)
         self.container_name = unquote(container_name)
         env['HTTP_X_AUTH_TOKEN'] = token
-        #env['PATH_INFO'] = '/v1/%s/%s/%s' % (account_name, container_name,
-        env['PATH_INFO'] = '/v1.0/AUTH_%s/%s/%s' % (account_name.split(':')[0], container_name,
-                                             object_name)
+        if path:
+            env['PATH_INFO'] = '%s/%s/%s' % (path, container_name, object_name)
+        else:
+            env['PATH_INFO'] = '/v1.0/AUTH_%s/%s/%s' % (account_name.split(':')[0], container_name,
+                                                        object_name)
 
     def GETorHEAD(self, env, start_response):
         app_iter = self.app(env, self.do_start_response)
@@ -452,7 +457,6 @@ class Swift3Middleware(object):
     def __call__(self, env, start_response):
         req = Request(env)
 
-        #print 'swift3 started'
         if 'AWSAccessKeyId' in req.GET:
             try:
                 req.headers['Date'] = req.GET['Expires']
@@ -475,11 +479,15 @@ class Swift3Middleware(object):
         except ValueError:
             return get_err_response('InvalidURI')(env, start_response)
 
-        token = base64.urlsafe_b64encode(canonical_string(req))
-        #print 'account: %s' % account
-        #print 'token: %s' % token
+        if 'X-Auth-Token' in req.headers:
+            token = req.headers['X-Auth-Token']
+            path = req.headers['X-Endpoint-Path']
+        else:
+            token = base64.urlsafe_b64encode(canonical_string(req))
+            path = None
+        print('token: %s, path: %s' % (token, path))
 
-        controller = controller(env, self.app, account, token, **path_parts)
+        controller = controller(env, self.app, account, token, path, **path_parts)
 
         if hasattr(controller, req.method):
             res = getattr(controller, req.method)(env, start_response)

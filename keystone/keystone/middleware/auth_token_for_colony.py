@@ -152,6 +152,7 @@ class AuthProtocol(object):
         # for ACL setting for containers of an account which others possesses.
         self.across_account = conf.get('across_account', 'yes').lower() in TRUE_VALUES
         self.memcache_expire = float(conf.get('memcache_expire', 86400))
+        self.easy_s3_auth = False
 
     def __call__(self, env, start_response):
         """ Handle incoming request. Authenticate. And send downstream. """
@@ -182,11 +183,13 @@ class AuthProtocol(object):
 
         # s3 support. add by colony
         s3 = env.get('HTTP_AUTHORIZATION')
-        if s3:
+        ep_path = env.get('HTTP_X_ENDPOINT_PATH')
+        if s3 and self.easy_s3_auth and not ep_path :
             result = self._s3_auth(env, claims)
         else:
             # check auth token with no admin privilege. add by colony
             result = self._accession_by_auth_token(env, claims)
+
         if not result:
             return self._reject_request(env, start_response)
         tenant, username, roles, storage_url = result
