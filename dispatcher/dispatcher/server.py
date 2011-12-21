@@ -23,6 +23,7 @@ from swift.common.constraints import CONTAINER_LISTING_LIMIT, MAX_ACCOUNT_NAME_L
 from swift.common.bufferedhttp import http_connect_raw, BufferedHTTPConnection, BufferedHTTPResponse
 from swift.proxy.server import update_headers
 from dispatcher.common.fastestmirror import FastestMirror
+from dispatcher.common.location import Location
 import os
 import sys
 
@@ -189,6 +190,101 @@ class Dispatcher(object):
         self.node_timeout = int(conf.get('node_timeout', 11))
         self.conn_timeout = float(conf.get('conn_timeout', 0.5))
         self.client_timeout = int(conf.get('client_timeout', 60))
+
+        self.req_version_str = 'v1.0'
+        self.req_auth_str = 'auth'
+        self.loc = Location(self.relay_rule)
+
+    def __call__new(self, env, start_response):
+        """ """
+        req = Request(env)
+        self.loc.reload()
+        loc_prefix = self.location_check(req)
+        if self.loc.is_merged(loc_prefix):
+            self.logger.info('enter merge mode')
+            resp = self.dispatch_in_merge(req, loc_prefix)
+        else:
+            self.logger.info('enter normal mode')
+            resp = self.dispatch_in_normal(req, loc_prefix)
+        start_response(resp.status, resp.headerlist)
+        return resp.app_iter if resp.app_iter is not None else resp.body
+
+    def location_check(self, req):
+        loc_prefix = req.path.split('/')[1].strip()
+        if loc_prefix == self.req_version_str:
+            return None
+        if loc_prefix == self.req_auth_str:
+            return None
+        return loc_prefix
+
+    def _get_real_path(self, req):
+        if self.location_check(req):
+            path = req.path.split('/')[2:]
+        else:
+            path = req.path.split('/')[1:]
+        return [p for p in path if p]
+
+    def dispatch_in_normal(self, req, location):
+        resp = self.relay_req(req, req.url, 
+                              self._get_real_path(req),
+                              self.loc.swift_of(location)[0],
+                              self.loc.webcache_of(location))
+        resp.headerlist = self.rewrite_storage_url_header(resp.headerlist, location)
+        header_names = [h for h, v in resp.headerlist]
+        if 'x-storage-url' in header_names \
+                and 'x-auth-token' in header_names \
+                and 'x-storage-token' in header_names:
+            if resp.content_length > 0:
+                resp.body = self.rewrite_storage_url_body(resp.body, location)
+        return resp
+
+    def _auth_check(self, req):
+        if 'x-auth-token' in req.headers or 'x-storage-token' in req.headers:
+            return True
+        return False
+
+    def _get_merged_path(self, req):
+        path = self._get_real_path(req)[1:]
+        if len(path) == 3:
+            account, container, obj = path
+            cont_prefix = self._get_container_prefix(container)
+            return account, cont_prefix, container, obj
+        if len(path) == 2:
+            account, container = path
+            cont_prefix = self._get_container_prefix(container)
+            return account, cont_prefix, container, None
+        if len(path) == 1:
+            account = path
+            return account, None, None, None
+
+    def _get_container_prefix(self, container):
+        if container.find(self.combinater_char) > 0:
+            cont_prefix = container.split(self.combinater_char)[0]
+            return cont_prefix
+        return None
+
+    def _get_copy_from(self, req):
+        cont, obj = [c for c in req.headers['x-copy-from'].split('/') if c]
+        cont_prefix = self._get_container_prefix(cont)
+        return cont_prefix, cont, obj
+
+    def dispatch_in_merge(self, req, location):
+        if not self._auth_check(req):
+            return get_auth_resp
+        account, cont_prefix, container, obj = self._get_merged_path(req)
+        if account and container and cont_prefix and obj and 'x-copy-from' in req.headers:
+            cp_cont_prefix, cp_cont, cp_obj = self._get_copy_from(req)
+            if cont_prefix == cp_cont_prefix:
+                return copy_in_same_account_resp
+            return copy_accross_accounts_resp
+        if account and cont_prefix and container and obj:
+            return get_object_resp
+        if account and cont_prefix and container:
+            return get_objects_resp
+        if account:
+            return get_merged_containers_resp
+        return 'error'
+
 
     def __call__(self, env, start_response):
         """ """
@@ -461,6 +557,9 @@ class Dispatcher(object):
         else:
             # normal mode
             relay_servers = relay_servers_info['swift'][0]
+            #print path_str_ls
+            #print relay_servers
+            #print webcaches
             resp = self.relay_req(req, req.url, path_str_ls, relay_servers, webcaches)
 
             resp.headerlist = self.rewrite_storage_url_header(resp.headerlist, path_location_prefix)
@@ -748,7 +847,7 @@ class Dispatcher(object):
                     location[loc_prefix.strip()]['swift'].append(swift_ls)
                     location[loc_prefix.strip()]['webcache'] = webcache_svrs
                     location[loc_prefix.strip()]['container_prefix'] = container_prefix
-        print location
+        #print location
         return location, file_age
 
     def check_file_age(self, location_str):
