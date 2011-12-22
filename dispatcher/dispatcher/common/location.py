@@ -63,13 +63,27 @@ class Location(object):
                 return False
         else:
             cont_prefix = self.locations['']['container_prefix']
+        p = urlparse(swift)
+        key = p.scheme + '://' + p.netloc
         try:
-            cont_prefix_name = cont_prefix[swift]
+            cont_prefix_name = cont_prefix[key]
         except KeyError:
             return False
         if cont_prefix_name:
             return cont_prefix_name
         return None
+
+    def container_prefixes_of(self, location_str):
+        if location_str:
+            try:
+                return self.locations[location_str]['container_prefix']
+            except KeyError:
+                return None
+        else:
+            return self.locations['']['container_prefix']
+
+    def servers_by_container_prefix_of(self, location_str, container_prefix):
+        return [k for k,v in self.container_prefixes_of(location_str).iteritems() if v == container_prefix]
 
     def _parse_location_str(self, location_str):
 
@@ -134,41 +148,44 @@ class Location(object):
                     location[loc_prefix.strip()]['container_prefix'] = container_prefix
         return location, file_age
 
-        def check_file_age(self, location_str):
-            """ """
-            file_age = None
-            for loc in location_str.split(','):
-                loc_prefix, files = loc.split(':')
-                for f in files.split(None):
-                    if f.startswith('('):
-                        f_str = f.split(')')
-                        f = f_str[1]
-                    tmp_file_age = os.stat(f).st_mtime
-                if file_age:
-                    if file_age < tmp_file_age:
-                        file_age = tmp_file_age
-                else:
+    def check_file_age(self, location_str):
+        """ """
+        file_age = None
+        for loc in location_str.split(','):
+            loc_prefix, files = loc.split(':')
+            for f in files.split(None):
+                if f.startswith('('):
+                    f_str = f.split(')')
+                    f = f_str[1]
+                tmp_file_age = os.stat(f).st_mtime
+            if file_age:
+                if file_age < tmp_file_age:
                     file_age = tmp_file_age
-            return file_age
+            else:
+                file_age = tmp_file_age
+        return file_age
 
 if __name__ == "__main__":
-    location_str = ':/home/yuzawataka/work/swift_work/trunk/dispatcher/etc/server0.txt, local:/home/yuzawataka/work/swift_work/trunk/dispatcher/etc/server1.txt, both:(hoge)/home/yuzawataka/work/swift_work/trunk/dispatcher/etc/server2.txt (gere)/home/yuzawataka/work/swift_work/trunk/dispatcher/etc/server3.txt, remote:/home/yuzawataka/work/swift_work/trunk/dispatcher/etc/server4.txt'
+    location_str = ':etc/server0.txt, local:etc/server1.txt, both:(hoge)etc/server2.txt (gere)etc/server3.txt'
     loc = Location(location_str)
     print loc.locations
-    print loc.age
-    print loc.servers_of('')
-    print loc.servers_of('local')
-    print loc.servers_of('both')
-    print loc.swift_of('')
-    print loc.swift_of('local')
-    print loc.swift_of('both')
-    print loc.is_merged('')
-    print loc.is_merged('local')
-    print loc.is_merged('both')
-    print loc.container_prefix_of('', 'http://172.30.112.168:8080')
-    print loc.container_prefix_of('both', 'http://172.30.112.168:8080')
-    print loc.container_prefix_of('both', 'http://172.30.112.170:8080')
-    print loc.webcache_of('')
-    print loc.webcache_of('local')
-    print loc.webcache_of('both')
-
+    # print loc.age
+    # print loc.servers_of('')
+    # print loc.servers_of('local')
+    # print loc.servers_of('both')
+    # print loc.swift_of('')
+    # print loc.swift_of('local')
+    # print loc.swift_of('both')
+    # print loc.is_merged('')
+    # print loc.is_merged('local')
+    # print loc.is_merged('both')
+    #print loc.container_prefix_of('', 'http://172.30.112.168:8080')
+    print loc.container_prefix_of('both', 'http://172.30.112.168:8080/v1.0/AUTH_test')
+    #print loc.container_prefix_of('both', 'http://172.30.112.170:8080')
+    # print loc.webcache_of('')
+    # print loc.webcache_of('local')
+    # print loc.webcache_of('both')
+    #print loc.container_prefixes_of('')
+    #print loc.container_prefixes_of('local')
+    print loc.container_prefixes_of('both')
+    print loc.servers_by_container_prefix_of('both', 'hoge')

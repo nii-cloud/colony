@@ -191,8 +191,10 @@ class Dispatcher(object):
         self.conn_timeout = float(conf.get('conn_timeout', 0.5))
         self.client_timeout = int(conf.get('client_timeout', 60))
 
+###################################################
         self.req_version_str = 'v1.0'
         self.req_auth_str = 'auth'
+        self.merged_combinator_str = '__@@__'
         self.loc = Location(self.relay_rule)
 
     def __call__new(self, env, start_response):
@@ -201,12 +203,15 @@ class Dispatcher(object):
         self.loc.reload()
         loc_prefix = self.location_check(req)
         if self.loc.is_merged(loc_prefix):
-            self.logger.info('enter merge mode')
+            self.logger.debug('enter merge mode')
             resp = self.dispatch_in_merge(req, loc_prefix)
         else:
-            self.logger.info('enter normal mode')
+            self.logger.debug('enter normal mode')
             resp = self.dispatch_in_normal(req, loc_prefix)
+        resp.headers['x-colony-dispatcher'] = 'dispatcher processed'
         start_response(resp.status, resp.headerlist)
+        if req.method in ('PUT', 'POST'):
+            return resp.body
         return resp.app_iter if resp.app_iter is not None else resp.body
 
     def location_check(self, req):
@@ -243,16 +248,18 @@ class Dispatcher(object):
             return True
         return False
 
-    def _get_merged_path(self, req):
+    def  _get_merged_path(self, req):
         path = self._get_real_path(req)[1:]
         if len(path) == 3:
             account, container, obj = path
             cont_prefix = self._get_container_prefix(container)
-            return account, cont_prefix, container, obj
+            real_container = container.split(cont_prefix + ':')[1]
+            return account, cont_prefix, real_container, obj
         if len(path) == 2:
             account, container = path
             cont_prefix = self._get_container_prefix(container)
-            return account, cont_prefix, container, None
+            real_container = container.split(cont_prefix + ':')[1]
+            return account, cont_prefix, real_container, None
         if len(path) == 1:
             account = path
             return account, None, None, None
@@ -270,21 +277,259 @@ class Dispatcher(object):
 
     def dispatch_in_merge(self, req, location):
         if not self._auth_check(req):
-            return get_auth_resp
+            return self.get_merged_auth_resp(req, location)
+
+        parsed = urlparse(req.url)
+        query = parse_qs(parsed.query)
+        marker = query['marker'][0] if query.has_key('marker') else None
         account, cont_prefix, container, obj = self._get_merged_path(req)
+
         if account and container and cont_prefix and obj and 'x-copy-from' in req.headers:
             cp_cont_prefix, cp_cont, cp_obj = self._get_copy_from(req)
             if cont_prefix == cp_cont_prefix:
                 return copy_in_same_account_resp
             return copy_accross_accounts_resp
-        if account and cont_prefix and container and obj:
-            return get_object_resp
         if account and cont_prefix and container:
-            return get_objects_resp
+            self.logger.debug('get_merged_container_and_object')
+            return self.get_merged_container_and_object(req, location, cont_prefix, container)
+        if account and container:
+            return HTTPNotFound(request=req)
+        if account and marker:
+            self.logger.debug('get_merged_containers_with_marker_resp')
+            return self.get_merged_containers_with_marker_resp(req, location, marker)
         if account:
-            return get_merged_containers_resp
-        return 'error'
+            self.logger.debug('get_merged_containers_resp')
+            return self.get_merged_containers_resp(req, location)
+        return HTTPNotFound(request=req)
 
+
+    def get_merged_auth_resp(self, req, location):
+        resps = []
+        for swift in self.loc.swift_of(location):
+            resps.append(self.relay_req(req, req.url, 
+                                        self._get_real_path(req),
+                                        swift,
+                                        self.loc.webcache_of(location)))
+        error_resp = self.check_error_resp(resps)
+        if error_resp:
+            return error_resp
+        ok_resps = []
+        for resp in resps:
+            if resp.status_int == 200:
+                ok_resps.append(resp)
+        resp = Response(status='200 OK')
+        resp.headerlist = self.merge_headers2(ok_resps, location)
+        resp.body = self.merge_storage_url_body2([r.body for r in ok_resps], location)
+        return resp
+
+    def merge_headers2(self, resps, location):
+        """ """
+        storage_urls = []
+        tokens = []
+        if self._has_header('x-storage-url', resps):
+            storage_urls = [r.headers['x-storage-url'] for r in resps]
+        if self._has_header('x-auth-token', resps):
+            tokens = [r.headers['x-auth-token'] for r in resps]
+        ac_byte_used = 0
+        ac_cont_count = 0
+        ac_obj_count = 0
+        if self._has_header('x-account-bytes-used', resps):
+            ac_byte_used = sum([int(r.headers['x-account-bytes-used']) for r in resps])
+        if self._has_header('x-account-container-count', resps):
+            ac_cont_count = sum([int(r.headers['x-account-container-count']) for r in resps])
+        if self._has_header('x-account-object-count', resps):
+            ac_obj_count = sum([int(r.headers['x-account-object-count']) for r in resps])
+        misc = {}
+        for r in resps:
+            for h, v in r.headers.iteritems():
+                if not h in ('x-storage-url', 'x-auth-token', 
+                             'x-account-bytes-used', 
+                             'x-account-container-count', 
+                             'x-account-object-count'):
+                    misc[h] = v
+        merged = []
+        if len(storage_urls) > 0:
+            merged.append(('x-storage-url', 
+                           self._get_merged_storage_url(storage_urls, location)))
+        if len(tokens) > 0:
+            merged.append(('x-auth-token', 
+                           self.merged_combinator_str.join(tokens)))
+            merged.append(('x-storage-token', 
+                           self.merged_combinator_str.join(tokens)))
+        if ac_byte_used:
+            merged.append(('x-account-bytes-used', str(ac_byte_used)))
+        if ac_cont_count:
+            merged.append(('x-account-container-count', str(ac_cont_count)))
+        if ac_obj_count:
+            merged.append(('x-account-object-count', str(ac_obj_count)))
+        for header in misc.keys():
+            merged.append((header, misc[header]))
+        return merged
+
+    def _get_merged_common_path(self, urls):
+        paths = [urlparse(u).path for u in urls]
+        if not filter(lambda a: paths[0] != a, paths):
+            return paths[0]
+        return None
+
+    def _get_merged_storage_url(self, urls, location):
+        scheme = 'https' if self.ssl_enabled else 'http'
+        common_path = self._get_merged_common_path(urls)
+        if not common_path: # swauth case
+            common_path = urlsafe_b64encode(self.merged_combinator_str.join(urls))
+        if location:
+            path = '/' + location + common_path
+        else:
+            path = common_path
+        return urlunparse((scheme, 
+                           '%s:%s' % (self.dispatcher_addr, self.dispatcher_port),
+                           path, None, None, None))
+
+
+    def _has_header(self, header, resps):
+        return sum([1 for r in resps if header in r.headers])
+
+    def merge_storage_url_body2(self, bodies, location):
+        """ """
+        storage_merged = {'storage': {}}
+        storage_urls = []
+        for body in bodies:
+            storage = json.loads(body)
+            for k, v in storage['storage'].iteritems():
+                parsed = urlparse(v)
+                if parsed.scheme == '':
+                    storage_merged['storage'][k] = v
+                else:
+                    storage_urls.append(v)
+        storage_merged['storage'][k] = \
+            self._get_merged_storage_url(storage_urls, location)
+        return json.dumps(storage_merged)
+
+    def get_merged_containers_resp(self, req, location):
+        """ """
+        auth_token = req.headers.get('x-auth-token') or req.headers.get('x-storage-token')
+        each_tokens = auth_token.split(self.merged_combinator_str)
+        cont_prefix_ls = []
+        real_path = '/' + '/'.join(self._get_real_path(req))
+        each_swift_cluster = self.loc.swift_of(location)
+        query = parse_qs(urlparse(req.url).query)
+        each_urls = [self._combinate_url(req, s[0],  real_path, query) for s in each_swift_cluster]
+        resps = []
+        for each_url, each_token, each_swift_svrs in zip(each_urls, each_tokens, each_swift_cluster):
+            req.headers['x-auth-token'] = each_token
+            resp = self.relay_req(req, each_url,
+                                  self._get_real_path(req),
+                                  each_swift_svrs, 
+                                  self.loc.webcache_of(location))
+            resps.append((each_url, resp))
+        error_resp = self.check_error_resp([r for u, r in resps])
+        if error_resp:
+            return error_resp
+        ok_resps = []
+        ok_cont_prefix = []
+        for url, resp in resps:
+            if resp.status_int == 200:
+                ok_resps.append(resp)
+                ok_cont_prefix.append(self.loc.container_prefix_of(location, url))
+        m_body = ''
+        m_headers = self.merge_headers2(ok_resps, location)
+        if req.method == 'GET':
+            if self._has_header('content-type', ok_resps):
+                content_type = [v for k,v in m_headers if k == 'content-type'][0]
+                m_body = self.merge_container_lists(content_type, 
+                                                    [r.body for r in ok_resps], 
+                                                    ok_cont_prefix)
+        resp = Response(status='200 OK')
+        resp.headerlist = m_headers
+        resp.body = m_body
+        return resp
+
+    def check_error_resp(self, resps):
+        status_ls = [r.status_int for r in resps]
+        if 200 not in status_ls:
+            error_status = max(status_ls)
+            for resp in resps:
+                if resp.status_int == error_status:
+                    return resp
+
+    def get_merged_containers_with_marker_resp(self, req, location, marker):
+        """ """
+        if marker.find(self.combinater_char) == -1:
+            return HTTPNotFound(request=req)
+        marker_prefix = self._get_container_prefix(marker)
+        real_marker = marker.split(marker_prefix + ':')[1]
+        swift_svrs = self.loc.servers_by_container_prefix_of(location, marker_prefix)
+        i = 0
+        found = None
+        for svrs in self.loc.swift_of(location):
+            for svr in svrs:
+                if svr in swift_svrs:
+                    found = True
+                    break
+            if found:
+                break
+            i += 1
+        auth_token = req.headers.get('x-auth-token') or req.headers.get('x-storage-token')
+        each_tokens = auth_token.split(self.merged_combinator_str)
+        query = parse_qs(urlparse(req.url).query)
+        query['marker'] = real_marker
+        real_path = '/' + '/'.join(self._get_real_path(req))
+        url = self._combinate_url(req, swift_svrs[0], real_path, query)
+        req.headers['x-auth-token'] = each_tokens[i]
+        resp = self.relay_req(req, url,
+                              self._get_real_path(req),
+                              swift_svrs, 
+                              self.loc.webcache_of(location))
+        m_headers = self.merge_headers([resp], location)
+        m_body = ''
+        if req.method == 'GET':
+            if self._has_header('content-type', [resp]):
+                content_type = [v for k,v in m_headers if k == 'content-type'][0]
+                m_body = self.merge_container_lists(content_type, [resp.body], [marker_prefix])
+        resp = Response(status='200 OK')
+        resp.headerlist = m_headers
+        resp.body = m_body
+        return resp
+
+    def _combinate_url(self, req, swift_svr, real_path, query):
+        parsed = urlparse(req.url)
+        choiced = urlparse(swift_svr)
+        url = (choiced.scheme, 
+               choiced.netloc, 
+               real_path, 
+               parsed.params, 
+               urlencode(query, True), 
+               parsed.fragment)
+        return urlunparse(url)
+
+    def get_merged_container_and_object(self, req, location, cont_prefix, container):
+        """ """
+        swift_svrs = self.loc.servers_by_container_prefix_of(location, cont_prefix)
+        i = 0
+        found = None
+        for svrs in self.loc.swift_of(location):
+            for svr in svrs:
+                if svr in swift_svrs:
+                    found = True
+                    break
+            if found:
+                break
+            i += 1
+        auth_token = req.headers.get('x-auth-token') or req.headers.get('x-storage-token')
+        each_tokens = auth_token.split(self.merged_combinator_str)
+        query = parse_qs(urlparse(req.url).query)
+        real_path_ls = self._get_real_path(req)
+        real_path_ls[2] = container
+        real_path = '/' + '/'.join(real_path_ls)
+        url = self._combinate_url(req, swift_svrs[0], real_path, query)
+        req.headers['x-auth-token'] = each_tokens[i]
+        resp = self.relay_req(req, url,
+                              real_path_ls,
+                              swift_svrs, 
+                              self.loc.webcache_of(location))
+        return resp
+
+###################################################
 
     def __call__(self, env, start_response):
         """ """
@@ -581,7 +826,7 @@ class Dispatcher(object):
             svr = parsed.netloc.split(':')
             if len(svr) == 1:
                 relay_addr = svr[0]
-                relay_port = 443 if parsed.scheme == 'https' else 80
+                relay_port = '443' if parsed.scheme == 'https' else '80'
             else:
                 relay_addr, relay_port = svr
             return relay_addr, relay_port
@@ -721,6 +966,7 @@ class Dispatcher(object):
         if storage_urls_appear:
             scheme = 'https' if self.ssl_enabled else 'http'
             scheme = 'https' if self.ssl_enabled else 'http'
+            print '__@@__'.join(storage_urls)
             if merged_path_location_prefix:
                 path = '/' + merged_path_location_prefix + '/' + urlsafe_b64encode('__@@__'.join(storage_urls))
             else:
