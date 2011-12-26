@@ -26,7 +26,8 @@ from dispatcher.common.fastestmirror import FastestMirror
 from dispatcher.common.location import Location
 import os
 import sys
-
+import time
+from cStringIO import StringIO
 
 class RelayRequest(object):
     """ """
@@ -195,6 +196,8 @@ class Dispatcher(object):
         self.req_version_str = 'v1.0'
         self.req_auth_str = 'auth'
         self.merged_combinator_str = '__@@__'
+        #self.put_object_max_size = MAX_FILE_SIZE
+        self.put_object_max_size = 5120
         self.loc = Location(self.relay_rule)
 
     def __call__new(self, env, start_response):
@@ -253,16 +256,17 @@ class Dispatcher(object):
         if len(path) == 3:
             account, container, obj = path
             cont_prefix = self._get_container_prefix(container)
-            real_container = container.split(cont_prefix + ':')[1]
+            real_container = container.split(cont_prefix + ':')[1] if cont_prefix else container
             return account, cont_prefix, real_container, obj
         if len(path) == 2:
             account, container = path
             cont_prefix = self._get_container_prefix(container)
-            real_container = container.split(cont_prefix + ':')[1]
+            real_container = container.split(cont_prefix + ':')[1] if cont_prefix else container
             return account, cont_prefix, real_container, None
         if len(path) == 1:
             account = path
             return account, None, None, None
+        return None, None, None, None
 
     def _get_container_prefix(self, container):
         if container.find(self.combinater_char) > 0:
@@ -273,7 +277,8 @@ class Dispatcher(object):
     def _get_copy_from(self, req):
         cont, obj = [c for c in req.headers['x-copy-from'].split('/') if c]
         cont_prefix = self._get_container_prefix(cont)
-        return cont_prefix, cont, obj
+        real_cont = cont.split(cont_prefix + ':')[1] if cont_prefix else cont
+        return cont_prefix, real_cont, obj
 
     def dispatch_in_merge(self, req, location):
         if not self._auth_check(req):
@@ -284,21 +289,32 @@ class Dispatcher(object):
         marker = query['marker'][0] if query.has_key('marker') else None
         account, cont_prefix, container, obj = self._get_merged_path(req)
 
-        if account and container and cont_prefix and obj and 'x-copy-from' in req.headers:
+        if account and cont_prefix and container and obj \
+                and req.method == 'PUT' \
+                and 'x-copy-from' in req.headers \
+                and req.headers['content-length'] == '0':
             cp_cont_prefix, cp_cont, cp_obj = self._get_copy_from(req)
+            if not cp_cont_prefix:
+                return HTTPNotFound(request=req)
             if cont_prefix == cp_cont_prefix:
-                return copy_in_same_account_resp
-            return copy_accross_accounts_resp
+                print 'copy_in_same_account'
+                return self.copy_in_same_account_resp(req, location, 
+                                                      cp_cont_prefix, cp_cont, cp_obj,
+                                                      cont_prefix, container, obj)
+            print 'copy_across_accounts'
+            return self.copy_across_accounts_resp(req, location, 
+                                                  cp_cont_prefix, cp_cont, cp_obj,
+                                                  cont_prefix, container, obj)
         if account and cont_prefix and container:
-            self.logger.debug('get_merged_container_and_object')
-            return self.get_merged_container_and_object(req, location, cont_prefix, container)
+            print 'get_merged_container_and_object'
+            return self.get_merged_container_and_object_resp(req, location, cont_prefix, container)
         if account and container:
             return HTTPNotFound(request=req)
         if account and marker:
-            self.logger.debug('get_merged_containers_with_marker_resp')
+            print 'get_merged_containers_with_marker'
             return self.get_merged_containers_with_marker_resp(req, location, marker)
         if account:
-            self.logger.debug('get_merged_containers_resp')
+            print 'get_merged_containers'
             return self.get_merged_containers_resp(req, location)
         return HTTPNotFound(request=req)
 
@@ -405,10 +421,13 @@ class Dispatcher(object):
             self._get_merged_storage_url(storage_urls, location)
         return json.dumps(storage_merged)
 
+    def _get_each_tokens(self, req):
+        auth_token = req.headers.get('x-auth-token') or req.headers.get('x-storage-token')
+        return auth_token.split(self.merged_combinator_str)
+
     def get_merged_containers_resp(self, req, location):
         """ """
-        auth_token = req.headers.get('x-auth-token') or req.headers.get('x-storage-token')
-        each_tokens = auth_token.split(self.merged_combinator_str)
+        each_tokens = self._get_each_tokens(req)
         cont_prefix_ls = []
         real_path = '/' + '/'.join(self._get_real_path(req))
         each_swift_cluster = self.loc.swift_of(location)
@@ -452,13 +471,8 @@ class Dispatcher(object):
                 if resp.status_int == error_status:
                     return resp
 
-    def get_merged_containers_with_marker_resp(self, req, location, marker):
-        """ """
-        if marker.find(self.combinater_char) == -1:
-            return HTTPNotFound(request=req)
-        marker_prefix = self._get_container_prefix(marker)
-        real_marker = marker.split(marker_prefix + ':')[1]
-        swift_svrs = self.loc.servers_by_container_prefix_of(location, marker_prefix)
+    def _get_servers_subscript_by_prefix(self, location, prefix):
+        swift_svrs = self.loc.servers_by_container_prefix_of(location, prefix)
         i = 0
         found = None
         for svrs in self.loc.swift_of(location):
@@ -469,16 +483,27 @@ class Dispatcher(object):
             if found:
                 break
             i += 1
-        auth_token = req.headers.get('x-auth-token') or req.headers.get('x-storage-token')
-        each_tokens = auth_token.split(self.merged_combinator_str)
+        return i
+
+    def get_merged_containers_with_marker_resp(self, req, location, marker):
+        """ """
+        if marker.find(self.combinater_char) == -1:
+            return HTTPNotFound(request=req)
+        marker_prefix = self._get_container_prefix(marker)
+        if not self.loc.servers_by_container_prefix_of(location, marker_prefix):
+            return HTTPNotFound(request=req)
+        real_marker = marker.split(marker_prefix + ':')[1]
+        swift_svrs = self.loc.servers_by_container_prefix_of(location, marker_prefix)
+        swift_server_subscript = self._get_servers_subscript_by_prefix(location, marker_prefix)
+        each_tokens = self._get_each_tokens(req)
         query = parse_qs(urlparse(req.url).query)
         query['marker'] = real_marker
         real_path = '/' + '/'.join(self._get_real_path(req))
         url = self._combinate_url(req, swift_svrs[0], real_path, query)
-        req.headers['x-auth-token'] = each_tokens[i]
+        req.headers['x-auth-token'] = each_tokens[swift_server_subscript]
         resp = self.relay_req(req, url,
                               self._get_real_path(req),
-                              swift_svrs, 
+                              swift_svrs,
                               self.loc.webcache_of(location))
         m_headers = self.merge_headers([resp], location)
         m_body = ''
@@ -498,36 +523,139 @@ class Dispatcher(object):
                choiced.netloc, 
                real_path, 
                parsed.params, 
-               urlencode(query, True), 
+               urlencode(query, True) if query else None,
                parsed.fragment)
         return urlunparse(url)
 
-    def get_merged_container_and_object(self, req, location, cont_prefix, container):
+    def get_merged_container_and_object_resp(self, req, location, cont_prefix, container):
         """ """
+        if not self.loc.servers_by_container_prefix_of(location, cont_prefix):
+            return HTTPNotFound(request=req)
         swift_svrs = self.loc.servers_by_container_prefix_of(location, cont_prefix)
-        i = 0
-        found = None
-        for svrs in self.loc.swift_of(location):
-            for svr in svrs:
-                if svr in swift_svrs:
-                    found = True
-                    break
-            if found:
-                break
-            i += 1
-        auth_token = req.headers.get('x-auth-token') or req.headers.get('x-storage-token')
-        each_tokens = auth_token.split(self.merged_combinator_str)
+        swift_server_subscript = self._get_servers_subscript_by_prefix(location, cont_prefix)
+        each_tokens = self._get_each_tokens(req)
         query = parse_qs(urlparse(req.url).query)
         real_path_ls = self._get_real_path(req)
         real_path_ls[2] = container
         real_path = '/' + '/'.join(real_path_ls)
         url = self._combinate_url(req, swift_svrs[0], real_path, query)
-        req.headers['x-auth-token'] = each_tokens[i]
+        req.headers['x-auth-token'] = each_tokens[swift_server_subscript]
         resp = self.relay_req(req, url,
                               real_path_ls,
-                              swift_svrs, 
+                              swift_svrs,
                               self.loc.webcache_of(location))
         return resp
+
+    def copy_in_same_account_resp(self, req, location, cp_cont_prefix, cp_cont, cp_obj,
+                                  cont_prefix, container, obj):
+        """ """
+        if not self.loc.servers_by_container_prefix_of(location, cont_prefix):
+            return HTTPNotFound(request=req)
+        swift_svrs = self.loc.servers_by_container_prefix_of(location, cont_prefix)
+        swift_server_subscript = self._get_servers_subscript_by_prefix(location, cont_prefix)
+        each_tokens = self._get_each_tokens(req)
+        query = parse_qs(urlparse(req.url).query)
+        req.headers['x-auth-token'] = each_tokens[swift_server_subscript]
+        real_path_ls = self._get_real_path(req)
+        real_path_ls[2] = container
+        real_path = '/' + '/'.join(real_path_ls)
+        url = self._combinate_url(req, swift_svrs[0], real_path, query)
+        req.headers['x-copy-from'] = '/%s/%s' % (cp_cont, cp_obj)
+        resp = self.relay_req(req, url,
+                              real_path_ls,
+                              swift_svrs,
+                              self.loc.webcache_of(location))
+        return resp
+
+    def copy_across_accounts_resp(self, req, location, cp_cont_prefix, cp_cont, cp_obj,
+                                  cont_prefix, container, obj):
+        """
+        TODO: use resp.app_iter rather than resp.body.
+        """
+        # GET object from account A
+        each_tokens = self._get_each_tokens(req)
+        query = parse_qs(urlparse(req.url).query)
+        from_req = req
+        from_swift_svrs = self.loc.servers_by_container_prefix_of(location, cp_cont_prefix)
+        from_token = each_tokens[self._get_servers_subscript_by_prefix(location, cp_cont_prefix)]
+        from_real_path_ls = self._get_real_path(req)
+        from_real_path_ls[2] = container
+        from_real_path = '/' + '/'.join(from_real_path_ls)
+        from_url = self._combinate_url(req, from_swift_svrs[0], from_real_path, None)
+        from_req.headers['x-auth-token'] = from_token
+        del from_req.headers['content-length']
+        del from_req.headers['x-copy-from']
+        from_req.method = 'GET'
+        from_resp = self.relay_req(from_req, from_url,
+                                   from_real_path_ls,
+                                   from_swift_svrs,
+                                   self.loc.webcache_of(location))
+        if from_resp.status_int != 200:
+            return self.check_error_resp([from_resp])
+
+        # PUT object to account B
+        to_req = req
+        obj_size = int(from_resp.headers['content-length'])
+        # if smaller then MAX_FILE_SIZE
+        if obj_size < self.put_object_max_size:
+            return self._create_put_req(to_req, location, 
+                                        cont_prefix, each_tokens, 
+                                        from_real_path_ls[1], container, obj, query,
+                                        from_resp.body,
+                                        from_resp.headers['content-length'])
+        """
+        if large object, split object and upload them.
+        (swift 1.4.3 api: Direct API Management of Large Objects)
+        """
+        max_segment = obj_size / self.put_object_max_size + 1
+        cur = str(time.time())
+        body = StringIO(from_resp.body)
+        for seg in range(max_segment):
+            """ 
+            <name>/<timestamp>/<size>/<segment> 
+            server_modified-20111115.py/1321338039.34/79368/00000075
+            """
+            split_obj = '%s/%s/%s/%08d' % (obj, cur, obj_size, seg)
+            split_obj_name = quote(split_obj, '')
+            chunk = body.read(self.put_object_max_size)
+            to_resp = self._create_put_req(to_req, location, 
+                                           cont_prefix, each_tokens, 
+                                           from_real_path_ls[1], container, 
+                                           split_obj_name, None,
+                                           chunk,
+                                           len(chunk))
+            if to_resp.status_int != 201:
+                body.close() 
+                return self.check_error_resp([to_resp])
+        # upload object manifest
+        body.close() 
+        to_req.headers['x-object-manifest'] = '%s/%s/%s/%s/' % (container, obj, cur, obj_size)
+        return self._create_put_req(to_req, location, 
+                                    cont_prefix, each_tokens, 
+                                    from_real_path_ls[1], container, obj, query,
+                                    None,
+                                    0)
+
+    def _create_put_req(self, to_req, location, prefix, each_tokens, 
+                       account, cont, obj, query, body, to_size):
+        """ """
+        to_swift_svrs = self.loc.servers_by_container_prefix_of(location, prefix)
+        to_token = each_tokens[self._get_servers_subscript_by_prefix(location, prefix)]
+        to_real_path = '/%s/%s/%s/%s' % (self.req_version_str,
+                                         account, cont, obj)
+        to_real_path_ls = to_real_path.split('/')[1:]
+        to_url = self._combinate_url(to_req, to_swift_svrs[0], to_real_path, query)
+        to_req.headers['x-auth-token'] = to_token
+        to_req.headers['content-length'] = to_size
+        if to_req.headers.has_key('x-copy-from'):
+            del to_req.headers['x-copy-from'] 
+        to_req.method = 'PUT'
+        to_req.body = body
+        to_resp = self.relay_req(to_req, to_url,
+                                 to_real_path_ls,
+                                 to_swift_svrs,
+                                 self.loc.webcache_of(location))
+        return to_resp
 
 ###################################################
 
