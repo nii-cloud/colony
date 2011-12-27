@@ -83,6 +83,23 @@ class RelayRequest(object):
             conn = http_connect_raw(host, port, method, path, headers=headers, query_string=query_string)
             return conn
 
+    def _connect_put_node(self, host, port, method, path, headers, query_string):
+        """Method for a file PUT connect"""
+        try:
+            with ConnectionTimeout(self.app.conn_timeout):
+                conn = http_connect_raw(host, port, method, path, 
+                                        headers=headers, query_string=query_string)
+            with Timeout(self.app.node_timeout):
+                resp = conn.getexpect()
+            if resp.status == 100:
+                conn.node = node
+                return conn
+            elif resp.status == 507:
+                self.error_limit(node)
+        except:
+            print 'Expect: 100-continue on %s' % path
+
+
     def __call__(self):
         """
         :return httplib.HTTP(S)Connection in success, and webob.exc.HTTPException in failure
@@ -221,13 +238,13 @@ class Dispatcher(object):
                               self._get_real_path(req),
                               self.loc.swift_of(location)[0],
                               self.loc.webcache_of(location))
-        resp.headerlist = self.rewrite_storage_url_header(resp.headerlist, location)
+        resp.headerlist = self._rewrite_storage_url_header(resp.headerlist, location)
         header_names = [h for h, v in resp.headerlist]
         if 'x-storage-url' in header_names \
                 and 'x-auth-token' in header_names \
                 and 'x-storage-token' in header_names:
             if resp.content_length > 0:
-                resp.body = self.rewrite_storage_url_body(resp.body, location)
+                resp.body = self._rewrite_storage_url_body(resp.body, location)
         return resp
 
     def dispatch_in_merge(self, req, location):
@@ -273,15 +290,6 @@ class Dispatcher(object):
 
     # return Response object
 
-    def check_error_resp(self, resps):
-        status_ls = [r.status_int for r in resps]
-        if [s for s in status_ls if not str(s).startswith('20')]:
-            error_status = max(status_ls)
-            for resp in resps:
-                if resp.status_int == error_status:
-                    return resp
-        return None
-
     def get_merged_auth_resp(self, req, location):
         """ """
         resps = []
@@ -298,8 +306,8 @@ class Dispatcher(object):
             if resp.status_int == 200:
                 ok_resps.append(resp)
         resp = Response(status='200 OK')
-        resp.headerlist = self.merge_headers(ok_resps, location)
-        resp.body = self.merge_storage_url_body([r.body for r in ok_resps], location)
+        resp.headerlist = self._merge_headers(ok_resps, location)
+        resp.body = self._merge_storage_url_body([r.body for r in ok_resps], location)
         return resp
 
     def get_merged_containers_resp(self, req, location):
@@ -330,11 +338,11 @@ class Dispatcher(object):
                 ok_resps.append(resp)
                 ok_cont_prefix.append(self.loc.container_prefix_of(location, url))
         m_body = ''
-        m_headers = self.merge_headers(ok_resps, location)
+        m_headers = self._merge_headers(ok_resps, location)
         if req.method == 'GET':
             if self._has_header('content-type', ok_resps):
                 content_type = [v for k,v in m_headers if k == 'content-type'][0]
-                m_body = self.merge_container_lists(content_type, 
+                m_body = self._merge_container_lists(content_type, 
                                                     [r.body for r in ok_resps], 
                                                     ok_cont_prefix)
         resp = Response(status='200 OK')
@@ -362,12 +370,12 @@ class Dispatcher(object):
                               self._get_real_path(req),
                               swift_svrs,
                               self.loc.webcache_of(location))
-        m_headers = self.merge_headers([resp], location)
+        m_headers = self._merge_headers([resp], location)
         m_body = ''
         if req.method == 'GET':
             if self._has_header('content-type', [resp]):
                 content_type = [v for k,v in m_headers if k == 'content-type'][0]
-                m_body = self.merge_container_lists(content_type, [resp.body], [marker_prefix])
+                m_body = self._merge_container_lists(content_type, [resp.body], [marker_prefix])
         resp = Response(status='200 OK')
         resp.headerlist = m_headers
         resp.body = m_body
@@ -390,6 +398,7 @@ class Dispatcher(object):
                               real_path_ls,
                               swift_svrs,
                               self.loc.webcache_of(location))
+        resp.headerlist = self._rewrite_object_manifest_header(resp.headerlist, cont_prefix)
         return resp
 
     def copy_in_same_account_resp(self, req, location, cp_cont_prefix, cp_cont, cp_obj,
@@ -482,7 +491,17 @@ class Dispatcher(object):
                                     None,
                                     0)
 
+
     # utils
+
+    def check_error_resp(self, resps):
+        status_ls = [r.status_int for r in resps]
+        if [s for s in status_ls if not str(s).startswith('20')]:
+            error_status = max(status_ls)
+            for resp in resps:
+                if resp.status_int == error_status:
+                    return resp
+        return None
 
     def location_check(self, req):
         loc_prefix = req.path.split('/')[1].strip()
@@ -507,8 +526,10 @@ class Dispatcher(object):
 
     def  _get_merged_path(self, req):
         path = self._get_real_path(req)[1:]
-        if len(path) == 3:
-            account, container, obj = path
+        if len(path) >= 3:
+            account = path[0]
+            container = path[1]
+            obj = '/'.join(path[2:])
             cont_prefix = self._get_container_prefix(container)
             real_container = container.split(cont_prefix + ':')[1] if cont_prefix else container
             return account, cont_prefix, real_container, obj
@@ -535,7 +556,7 @@ class Dispatcher(object):
         return cont_prefix, real_cont, obj
 
 
-    def merge_headers(self, resps, location):
+    def _merge_headers(self, resps, location):
         """ """
         storage_urls = []
         tokens = []
@@ -602,7 +623,7 @@ class Dispatcher(object):
     def _has_header(self, header, resps):
         return sum([1 for r in resps if r.headers.has_key(header)])
 
-    def merge_storage_url_body(self, bodies, location):
+    def _merge_storage_url_body(self, bodies, location):
         """ """
         storage_merged = {'storage': {}}
         storage_urls = []
@@ -665,19 +686,28 @@ class Dispatcher(object):
         if to_req.headers.has_key('x-copy-from'):
             del to_req.headers['x-copy-from'] 
         to_req.method = 'PUT'
-        to_req.body = body
+        if isinstance(body, file):
+            to_req.body_file = body
+        else:
+            to_req.body = body
         to_resp = self.relay_req(to_req, to_url,
                                  to_real_path_ls,
                                  to_swift_svrs,
                                  self.loc.webcache_of(location))
         return to_resp
 
-    def rewrite_storage_url_header(self, headers, path_location_prefix=None):
+    def _rewrite_object_manifest_header(self, headers, container_prefix):
+        rewrited = []
+        for h, v in headers:
+            if h == 'x-object-manifest':
+                v = container_prefix + ':' + v
+            rewrited.append((h, v))
+        return rewrited
+
+    def _rewrite_storage_url_header(self, headers, path_location_prefix=None):
         """ """
         rewrited = []
         for header, value in headers:
-            if header == 'content-length':
-                print 'content-length: %s' % value
             if header == 'x-storage-url':
                 parsed = urlparse(value)
                 if path_location_prefix:
@@ -692,7 +722,7 @@ class Dispatcher(object):
                 rewrited.append((header, value))
         return rewrited
 
-    def rewrite_storage_url_body(self, body, path_location_prefix=None):
+    def _rewrite_storage_url_body(self, body, path_location_prefix=None):
         """ """
         # some auth filter (includes tempauth) doesn't return json body
         try:
@@ -715,7 +745,7 @@ class Dispatcher(object):
                 storage_rewrite['storage'][k] = urlunparse(rewrite_url)
         return json.dumps(storage_rewrite)
 
-    def merge_container_lists(self, content_type, bodies, prefixes):
+    def _merge_container_lists(self, content_type, bodies, prefixes):
         """ """
         if content_type.startswith('text/plain'):
             merge_body = []
