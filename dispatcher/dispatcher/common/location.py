@@ -1,19 +1,24 @@
 # coding=utf-8
 import os
 from urlparse import urlparse
+#from dispatcher.common.fastestmirror import FastestMirror
+import time
 
 class Location(object):
 
     def __init__(self, location_str):
         self.location_str = location_str
-        self.locations, self.age = self._parse_location_str(self.location_str)
+        self.locations, self.age = self._load(location_str)
         
     def __call__(self):
         pass
 
+    def _load(self, location_str):
+        return self._parse_location_str(self.location_str)
+
     def reload(self):
         if self.check_file_age(self.location_str) > self.age:
-            self.locations, self.age = self._parse_location_str(self.location_str)
+            self.locations, self.age = self._load(location_str)
 
     def servers_of(self, location_str):
         if location_str:
@@ -180,12 +185,12 @@ if __name__ == "__main__":
     # print loc.is_merged('local')
     # print loc.is_merged('both')
     #print loc.container_prefix_of('', 'http://172.30.112.168:8080')
-    print loc.container_prefix_of('both', 'http://172.30.112.168:8080/v1.0/AUTH_test')
+    #print loc.container_prefix_of('both', 'http://172.30.112.168:8080/v1.0/AUTH_test')
     #print loc.container_prefix_of('both', 'http://172.30.112.170:8080')
     # print loc.webcache_of('')
     # print loc.webcache_of('local')
     # print loc.webcache_of('both')
     #print loc.container_prefixes_of('')
     #print loc.container_prefixes_of('local')
-    print loc.container_prefixes_of('both')
-    print loc.servers_by_container_prefix_of('both', 'hoge')
+    #print loc.container_prefixes_of('both')
+    #print loc.servers_by_container_prefix_of('both', 'hoge')
