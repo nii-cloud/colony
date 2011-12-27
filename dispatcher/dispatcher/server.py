@@ -233,6 +233,7 @@ class Dispatcher(object):
         return [p for p in path if p]
 
     def dispatch_in_normal(self, req, location):
+        """ """
         resp = self.relay_req(req, req.url, 
                               self._get_real_path(req),
                               self.loc.swift_of(location)[0],
@@ -281,7 +282,9 @@ class Dispatcher(object):
         return cont_prefix, real_cont, obj
 
     def dispatch_in_merge(self, req, location):
+        """ """
         if not self._auth_check(req):
+            self.logger.debug('get_merged_auth')
             return self.get_merged_auth_resp(req, location)
 
         parsed = urlparse(req.url)
@@ -320,6 +323,7 @@ class Dispatcher(object):
 
 
     def get_merged_auth_resp(self, req, location):
+        """ """
         resps = []
         for swift in self.loc.swift_of(location):
             resps.append(self.relay_req(req, req.url, 
@@ -349,16 +353,17 @@ class Dispatcher(object):
         ac_byte_used = 0
         ac_cont_count = 0
         ac_obj_count = 0
-        if self._has_header('x-account-bytes-used', resps):
-            ac_byte_used = sum([int(r.headers['x-account-bytes-used']) for r in resps])
-        if self._has_header('x-account-container-count', resps):
-            ac_cont_count = sum([int(r.headers['x-account-container-count']) for r in resps])
-        if self._has_header('x-account-object-count', resps):
-            ac_obj_count = sum([int(r.headers['x-account-object-count']) for r in resps])
+        if self._has_header('X-Account-Bytes-Used', resps):
+            ac_byte_used = sum([int(r.headers['X-Account-Bytes-Used']) for r in resps])
+        if self._has_header('X-Account-Container-Count', resps):
+            ac_cont_count = sum([int(r.headers['X-Account-Container-Count']) for r in resps])
+        if self._has_header('X-Account-Object-Count', resps):
+            ac_obj_count = sum([int(r.headers['X-Account-Object-Count']) for r in resps])
         misc = {}
         for r in resps:
             for h, v in r.headers.iteritems():
-                if not h in ('x-storage-url', 'x-auth-token', 
+                if not h in ('x-storage-url', 
+                             'x-auth-token', 'x-storage-token', 
                              'x-account-bytes-used', 
                              'x-account-container-count', 
                              'x-account-object-count'):
@@ -401,9 +406,8 @@ class Dispatcher(object):
                            '%s:%s' % (self.dispatcher_addr, self.dispatcher_port),
                            path, None, None, None))
 
-
     def _has_header(self, header, resps):
-        return sum([1 for r in resps if header in r.headers])
+        return sum([1 for r in resps if r.headers.has_key(header)])
 
     def merge_storage_url_body2(self, bodies, location):
         """ """
@@ -423,11 +427,15 @@ class Dispatcher(object):
 
     def _get_each_tokens(self, req):
         auth_token = req.headers.get('x-auth-token') or req.headers.get('x-storage-token')
+        if auth_token.find(self.merged_combinator_str) == -1:
+            return None
         return auth_token.split(self.merged_combinator_str)
 
     def get_merged_containers_resp(self, req, location):
         """ """
         each_tokens = self._get_each_tokens(req)
+        if not each_tokens:
+            return HTTPUnauthorized(request=req)
         cont_prefix_ls = []
         real_path = '/' + '/'.join(self._get_real_path(req))
         each_swift_cluster = self.loc.swift_of(location)
@@ -447,7 +455,7 @@ class Dispatcher(object):
         ok_resps = []
         ok_cont_prefix = []
         for url, resp in resps:
-            if resp.status_int == 200:
+            if resp.status_int >= 200 and resp.status_int <= 299:
                 ok_resps.append(resp)
                 ok_cont_prefix.append(self.loc.container_prefix_of(location, url))
         m_body = ''
@@ -465,11 +473,12 @@ class Dispatcher(object):
 
     def check_error_resp(self, resps):
         status_ls = [r.status_int for r in resps]
-        if 200 not in status_ls:
+        if [s for s in status_ls if not str(s).startswith('20')]:
             error_status = max(status_ls)
             for resp in resps:
                 if resp.status_int == error_status:
                     return resp
+        return None
 
     def _get_servers_subscript_by_prefix(self, location, prefix):
         swift_svrs = self.loc.servers_by_container_prefix_of(location, prefix)
