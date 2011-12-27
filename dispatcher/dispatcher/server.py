@@ -200,7 +200,7 @@ class Dispatcher(object):
         self.put_object_max_size = 5120
         self.loc = Location(self.relay_rule)
 
-    def __call__new(self, env, start_response):
+    def __call__(self, env, start_response):
         """ """
         req = Request(env)
         self.loc.reload()
@@ -297,24 +297,24 @@ class Dispatcher(object):
             if not cp_cont_prefix:
                 return HTTPNotFound(request=req)
             if cont_prefix == cp_cont_prefix:
-                print 'copy_in_same_account'
+                self.logger.debug('copy_in_same_account')
                 return self.copy_in_same_account_resp(req, location, 
                                                       cp_cont_prefix, cp_cont, cp_obj,
                                                       cont_prefix, container, obj)
-            print 'copy_across_accounts'
+            self.logger.debug('copy_across_accounts')
             return self.copy_across_accounts_resp(req, location, 
                                                   cp_cont_prefix, cp_cont, cp_obj,
                                                   cont_prefix, container, obj)
         if account and cont_prefix and container:
-            print 'get_merged_container_and_object'
+            self.logger.debug('get_merged_container_and_object')
             return self.get_merged_container_and_object_resp(req, location, cont_prefix, container)
         if account and container:
             return HTTPNotFound(request=req)
         if account and marker:
-            print 'get_merged_containers_with_marker'
+            self.logger.debug('get_merged_containers_with_marker')
             return self.get_merged_containers_with_marker_resp(req, location, marker)
         if account:
-            print 'get_merged_containers'
+            self.logger.debug('get_merged_containers')
             return self.get_merged_containers_resp(req, location)
         return HTTPNotFound(request=req)
 
@@ -659,7 +659,7 @@ class Dispatcher(object):
 
 ###################################################
 
-    def __call__(self, env, start_response):
+    def __call__old(self, env, start_response):
         """ """
 
         # utilis
@@ -982,6 +982,8 @@ class Dispatcher(object):
                 else:
                     return result
 
+            #print result.getheader('content-length')
+
             response = Response(status='%s %s' % (result.status, result.reason))
             response.bytes_transferred = 0
 
@@ -1007,14 +1009,18 @@ class Dispatcher(object):
                 update_headers(response, {'accept-ranges': 'bytes'})
                 response.content_length = result.getheader('Content-Length')
             update_headers(response, result.getheaders())
+            if req.method == 'HEAD':
+                update_headers(response, {'Content-Length': 
+                                          result.getheader('Content-Length')})
             response.status = result.status
-
         return response
 
     def rewrite_storage_url_header(self, headers, path_location_prefix=None):
         """ """
         rewrited = []
         for header, value in headers:
+            if header == 'content-length':
+                print 'content-length: %s' % value
             if header == 'x-storage-url':
                 parsed = urlparse(value)
                 if path_location_prefix:
