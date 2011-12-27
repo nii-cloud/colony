@@ -2,131 +2,147 @@ try:
     import simplejson as json
 except ImportError:
     import json
-from base64 import urlsafe_b64encode, urlsafe_b64decode
 from urlparse import urlparse, urlunparse
 from eventlet.green.httplib import HTTPConnection, HTTPResponse, HTTPSConnection
 from webob import Request, Response
-from webob.exc import HTTPException, HTTPAccepted, HTTPBadRequest, HTTPConflict, \
-    HTTPCreated, HTTPForbidden, HTTPMethodNotAllowed, HTTPMovedPermanently, \
-    HTTPNoContent, HTTPNotFound, HTTPServiceUnavailable, HTTPUnauthorized, \
-    HTTPGatewayTimeout, HTTPBadGateway,  HTTPRequestEntityTooLarge, HTTPServerError
-from urllib import quote, unquote
-import urllib2
-from swift.common.utils import cache_from_env, get_logger, TRUE_VALUES
+from swift.common.utils import get_logger
 from eventlet.timeout import Timeout
-from swift.common.exceptions import ConnectionTimeout, ChunkReadTimeout, ChunkWriteTimeout
+from swift.common.exceptions import ConnectionTimeout
 import os
 import sys
+
+"""
+Setting
+
+[pipeline:main]
+pipeline = keystone_merge dispatcher
+
+[filter:keystone_merge]
+use = egg:dispatcher#keystone_merge
+keystone_relay_path = /both/v2.0
+keystone_relay_token_paths = /both/v2.0/tokens /both/v2.0/hogehoge
+keystone_one_url = http://192.0.2.100:5001
+keystone_other_url = http://192.0.2.200:5001
+dispatcher_base_url = http://192.0.2.1:10000
+region_name = RegionOne
+
+"""
 
 class KeystoneMerge(object):
     """ """
     def __init__(self, app, conf):
+        """ """
         self.app = app
         self.conf = conf
         self.logger = get_logger(conf, log_route='keystone_merge')
-        self.sp = conf.get('keystone_merge')
-        self.keystone_relay_path = '/both/v2.0'
-        self.keystone_relay_token_path = '/both/v2.0/tokens'
-        self.logger.warn('keystone_merge loaded')
-        self.keystone_urls = ['http://172.30.112.168:5000', 'http://172.30.112.170:5000']
-        self.keystone_academic_url = 'http://172.30.112.168:5000'
-        self.keystone_intercloud_url = 'http://172.30.112.170:5000'
-        self.dispatcher_url = 'http://127.0.0.1:10000'
-        self.merge_location_path = 'both'
-        self.region_name = 'RegionOne'
+        self.keystone_relay_path = conf.get('keystone_relay_path','/both/v2.0')
+        self.keystone_relay_token_paths = conf.get('keystone_relay_token_paths').split()
+        self.keystone_one_url = conf.get('keystone_one_url')
+        self.keystone_other_url = conf.get('keystone_other_url')
+        self.dispatcher_base_url = conf.get('dispatcher_base_url')
+        self.region_name = conf.get('region_name', 'RegionOne')
         self.merge_str = '__@@__'
-
+        self.merge_location_path = self.keystone_relay_path.split('/')[1]
+        self.logger.info('keystone_merge loaded')
 
     def __call__(self, env, start_response):
         """ """
         req = Request(env)
-        if self.is_keystone_req(env):
-            if self.is_keystone_auth_req(env):
-                merged_body, headers = self.relay_keystone_auth_req(env)
-                if merged_body:
-                    merged_resp = Response(request=req, body=merged_body, headers=headers)
-                    start_response(merged_resp.status, merged_resp.headerlist)
-                    return json.dumps(merged_resp.body)
-                else:
-                    return self.app(env, start_response)
-            else:
-                result = self.relay_keystone_req(env)
-                resp = Response(status='%s %s' % (result.status, result.reason));
-                resp.headerlist = result.getheaders()
-                resp.body = result.read()
-                #print resp.body
-                start_response(resp.status, resp.headerlist)
-                return resp.body
-        else:
+        real_path = '/' + '/'.join(req.path.split('/')[2:])
+        if not self.is_keystone_req(req):
+            self.logger.info('pass through')
             return self.app(env, start_response)
-
-    def is_keystone_req(self, env):
-        """ """
-        path = env['PATH_INFO']
-        if path.startswith(self.keystone_relay_path):
-            return True
-        else:
-            return False
-
-    def is_keystone_auth_req(self, env):
-        """ """
-        path = env['PATH_INFO']
-        method = env['REQUEST_METHOD']
-        content_type = env['CONTENT_TYPE']
-        if path == self.keystone_relay_token_path and method == 'POST' and content_type == 'application/json':
-            return True
-        else:
-            return False
-
-    def relay_keystone_req(self, env):
-        method = env['REQUEST_METHOD']
-        path = env['PATH_INFO']
-        body = env['wsgi.input'].read()
-        path_ls = path.split('/')
-        rewrite_path = '/%s' % '/'.join(path_ls[2:])
-        token = env['HTTP_X_AUTH_TOKEN']
-        academic_token = token.split(self.merge_str)[0]
-        return self._request_to_keystone(method, self.keystone_academic_url, rewrite_path, {'X-Auth-Token': academic_token}, body)
-
-    def relay_keystone_auth_req(self, env):
-        """ """
-        body = env['wsgi.input'].read()
-        request = json.loads(body)
-        _dummy_request = request['auth']
-        resps = []
-        if _dummy_request.has_key('passwordCredentials'):
-            resps = [self._request_to_keystone('POST', url, '/v2.0/tokens', {'content-type': 'application/json'}, body) for url in [self.keystone_academic_url, self.keystone_intercloud_url]]
-        elif _dummy_request.has_key('token'):
-            merged_token = request['auth']['token']['id']
-            if merged_token.find(self.merge_str) != -1:
-                requests = self.merged_request_token_split(request)
-                for url,request in zip([self.keystone_academic_url, self.keystone_intercloud_url], requests):
-                    resp = self._request_to_keystone('POST', url, '/v2.0/tokens', {'content-type': 'application/json'}, json.dumps(request))
-                    resps.append(resp)
+        if self.is_keystone_auth_token_req(req, self.keystone_relay_token_paths):
+            self.logger.info('return auth response that merged one and other')
+            mbody, mheaders = self.relay_keystone_auth_req(req, real_path)             
+            if mbody:
+                merged_resp = Response(request=req, 
+                                       body=mbody, 
+                                       headers=mheaders)
+                start_response(merged_resp.status, merged_resp.headerlist)
+                return json.dumps(merged_resp.body)
             else:
-                return None, None
-        else:
-            return None, None
-        bodies = self._get_bodies(resps)
-        return self.access_info_merge(bodies), {}
+                return self.app(env, start_response)
+        self.logger.info('normal keystone request to one')
+        result = self.relay_keystone_ordinary_req(req)
+        resp = Response(status='%s %s' % (result.status, result.reason));
+        resp.headerlist = result.getheaders()
+        resp.body = result.read()
+        start_response(resp.status, resp.headerlist)
+        return resp.body
 
-    def merged_request_token_split(self, request):
+    def is_keystone_req(self, req):
+        """ 
+        check a path which keystone_merge controls.
+        """
+        if req.path.startswith(self.keystone_relay_path):
+            return True
+        return False
+
+    def is_keystone_auth_token_req(self, req, paths):
+        """ 
+        check path is controled by keystone_merge. 
+        ex: '/v2.0/tokens'
+        """
+        for path in paths:
+            if req.path == path and req.method == 'POST' \
+                    and req.content_type == 'application/json':
+                return True
+        return False
+
+
+    def relay_keystone_ordinary_req(self, req):
+        """
+        relay requests (not 'Authenticate for Service API and the other') to keystone_one_url.
+        """
+        path_ls = req.path.split('/')
+        rewrite_path = '/%s' % '/'.join(path_ls[2:])
+        tokens = req.headers['x-auth-token']
+        one_token = tokens.split(self.merge_str)[0]
+        req.headers['x-auth-token'] = one_token
+        return self._request_to_keystone(req.method, self.keystone_one_url, 
+                                         rewrite_path, req.headers, req.body)
+
+
+    def relay_keystone_auth_req(self, req, path):
+        """ 
+        relay auth request by Creds to each keystone, and merge response. 
+        """
+        request = json.loads(req.body)
+        creds = request['auth'] if request.has_key('auth') else request
+        if creds.has_key('token') and path == '/v2.0/tokens':
+            # for recomfirming auth token
+            merged_token = creds['token']['id']
+            if merged_token.find(self.merge_str) == -1:
+                return None, None
+            requests = self._merged_request_token_split(request)
+            for url,request in zip([self.keystone_one_url, self.keystone_other_url], requests):
+                resp = self._request_to_keystone('POST', url, path, 
+                                                 req.headers, json.dumps(request))
+                resps.append(resp)
+        else:
+            resps = [self._request_to_keystone('POST', url, path, 
+                                               req.headers, req.body)
+                     for url in [self.keystone_one_url, self.keystone_other_url]]
+        bodies = self._get_bodies(resps)
+        return self._access_info_merge(bodies), self._merge_headers(resps)
+
+    def _merged_request_token_split(self, request):
         requests = []
         merged_token = request['auth']['token']['id']
         tokens = merged_token.split(self.merge_str)
         for token in tokens:
-            each_request = {'auth': {'token': {'id': token}, "tenantId": "1"}}
+            each_request = {'auth': {'token': {'id': token}, "tenantId": ""}}
             requests.append(each_request)
         return requests
 
-    def access_info_merge(self, bodies):
+    def _access_info_merge(self, bodies):
         """ """
         tokens = []
         users = []
         catalogs = []
         swift_cats = []
         for body in bodies:
-            #print body
             tokens.append(body['access']['token'])
             users.append(body['access']['user'])
             catalogs.append(body['access']['serviceCatalog'])
@@ -135,8 +151,13 @@ class KeystoneMerge(object):
                 if c['name'] == 'swift':
                     swift_cats.append(c)
         token = self._token_merge(tokens)
-        swift_catalog = self._swift_catalog_merge(swift_cats, self.dispatcher_url, self.merge_location_path, self.region_name)
-        return {'access': {'token': token, 'serviceCatalog': [swift_catalog], 'user': users[0]}}
+        swift_catalog = self._swift_catalog_merge(swift_cats, 
+                                                  self.dispatcher_base_url, 
+                                                  self.merge_location_path, 
+                                                  self.region_name)
+        return {'access': {'token': token, 
+                           'serviceCatalog': [swift_catalog], 
+                           'user': users[0]}}
 
     def _get_bodies(self, resps):
         for resp in resps:
@@ -153,7 +174,8 @@ class KeystoneMerge(object):
         tkn_id = self.merge_str.join([token['id'] for token in tokens])
         return {'expires': expires, 'id': tkn_id, 'tenant': tenant}
 
-    def _swift_catalog_merge(self, swift_cats, dispatcher_url, merge_location_path, region_name):
+    def _swift_catalog_merge(self, swift_cats, dispatcher_base_url, 
+                             merge_location_path, region_name):
         adminURLs = []
         internalURLs = []
         publicURLs = []
@@ -163,13 +185,34 @@ class KeystoneMerge(object):
                     adminURLs.append(region['adminURL'])
                     internalURLs.append(region['internalURL'])
                     publicURLs.append(region['publicURL'])
-        adminURL = '%s/%s/%s' % (dispatcher_url, merge_location_path, urlsafe_b64encode(self.merge_str.join(adminURLs)))
-        internalURL = '%s/%s/%s' % (dispatcher_url, merge_location_path, urlsafe_b64encode(self.merge_str.join(internalURLs)))
-        publicURL = '%s/%s/%s' % (dispatcher_url, merge_location_path, urlsafe_b64encode(self.merge_str.join(publicURLs)))
+        adminURL = '%s/%s%s' % (dispatcher_base_url, merge_location_path, 
+                                 self._get_merged_common_path(adminURLs))
+        internalURL = '%s/%s%s' % (dispatcher_base_url, merge_location_path, 
+                                 self._get_merged_common_path(internalURLs))
+        publicURL = '%s/%s%s' % (dispatcher_base_url, merge_location_path, 
+                                 self._get_merged_common_path(publicURLs))
         return {'endpoints': [{'adminURL': adminURL,
                                'internalURL': internalURL,
                                'publicURL': publicURL,
-                               'region': region_name, 'type': 'object-store', 'name': 'swift'}]}
+                               'region': region_name, 
+                               'type': 'object-store', 
+                               'name': 'swift'}]}
+
+    def _get_merged_common_path(self, urls):
+        paths = [urlparse(u).path for u in urls]
+        if not filter(lambda a: paths[0] != a, paths):
+            return paths[0]
+        return None
+
+    def _merge_headers(self, resps):
+        mheaders = {}
+        headers = []
+        for hs in [r.getheaders() for r in resps]:
+            headers = headers + hs
+        for h, v in headers:
+            if h != 'content-length' and h != 'date':
+                mheaders[h] = v
+        return mheaders
 
     def _split_netloc(self, parsed_url):
         host, port = parsed_url.netloc.split(':')
