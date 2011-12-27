@@ -31,7 +31,7 @@ from cStringIO import StringIO
 
 class RelayRequest(object):
     """ """
-    def __init__(self, req, url, proxy=None, conn_timeout=None, node_timeout=None, chunk_size=65536):
+    def __init__(self, conf, req, url, proxy=None, conn_timeout=None, node_timeout=None, chunk_size=65536):
         self.req = req
         self.method = req.method
         self.url = url
@@ -42,13 +42,14 @@ class RelayRequest(object):
         self.client_timeout = 60
         self.node_timeout = node_timeout if node_timeout else 60
         self.retry_times_get_response_from_swift = 10
+        self.logger = get_logger(conf, log_route='dispatcher.RelayRequest')
 
     def proxy_request_check(self, proxy, method, path):
         """
         using WebCache when 'Get Object' only.
 
         """
-        if proxy and method == 'GET' and len(path.split('/')) == 5:
+        if proxy and method == 'GET' and len(path.split('/')) >= 5:
             return True
         else:
             return False
@@ -72,15 +73,16 @@ class RelayRequest(object):
                 try:
                     with ChunkWriteTimeout(self.node_timeout):
                         conn.send(chunk)
-                        print 'Sending...'
+                        self.logger.debug('Sending...')
                 except (Exception, ChunkWriteTimeout):
                     conn.failed = True
-                    print 'Trying to write to %s' % path
+                    self.logger.debug('Trying to write to %s' % path)
             conn.queue.task_done()
 
     def _connect_server(self,  host, port, method, path, headers, query_string):
         with ConnectionTimeout(self.conn_timeout):
-            conn = http_connect_raw(host, port, method, path, headers=headers, query_string=query_string)
+            conn = http_connect_raw(host, port, method, path, 
+                                    headers=headers, query_string=query_string)
             return conn
 
     def _connect_put_node(self, host, port, method, path, headers, query_string):
@@ -121,9 +123,6 @@ class RelayRequest(object):
             path = parsed.path
         self.headers['host'] = '%s:%s' % (host, port)
 
-        # if self.headers.has_key('x-auth-token'):
-        #     print self.headers['x-auth-token']
-
         if self.method == 'PUT' and len(parsed.path.split('/')) == 5:
             chunked = self.req.headers.get('transfer-encoding')
             reader = self.req.environ['wsgi.input'].read
@@ -134,7 +133,8 @@ class RelayRequest(object):
             # conns = [conn for conn in pile if conn]
             # conn = conns[0]
             with ConnectionTimeout(self.conn_timeout):
-                conn = http_connect_raw(host, port, self.method, path, headers=self.headers, query_string=parsed.query)
+                conn = http_connect_raw(host, port, self.method, path, 
+                                        headers=self.headers, query_string=parsed.query)
             with ContextPool(1) as pool:
                 conn.failed = False
                 conn.queue = Queue(10)
@@ -148,7 +148,7 @@ class RelayRequest(object):
                                 conn.queue.put('0\r\n\r\n')
                             break
                         except Exception, err:
-                            print 'Chunk Read Error: %s' % err
+                            self.logger.debug('Chunk Read Error: %s' % err)
                     bytes_transferred += len(chunk)
                     if bytes_transferred > MAX_FILE_SIZE:
                         return HTTPRequestEntityTooLarge(request=self.req)
@@ -161,17 +161,16 @@ class RelayRequest(object):
                         sleep(0.1)
                 if conn.queue.unfinished_tasks:
                     conn.queue.join()
-            print conn
             # In heavy condition, getresponse() may fails, so it causes 'timed out' in eventlet.greenio.
             # Checking a result of response and retrying prevent it. But is this reason of the error really?
             resp = None
             with Timeout(self.node_timeout):
                 for i in range(self.retry_times_get_response_from_swift):
-                    print 'Retry counter: %s' % i
+                    self.logger.debug('Retry counter: %s' % i)
                     try:
                         resp = conn.getresponse()
                     except Exception, err:
-                        print 'get response of PUT Error: %s' % err
+                        self.logger.debug('get response of PUT Error: %s' % err)
                     if isinstance(resp, BufferedHTTPResponse):
                         break
                     else:
@@ -186,11 +185,12 @@ class RelayRequest(object):
         else:
             try:
                 with ConnectionTimeout(self.conn_timeout):
-                    conn = http_connect_raw(host, port, self.method, path, headers=self.headers, query_string=parsed.query)
+                    conn = http_connect_raw(host, port, self.method, path, 
+                                            headers=self.headers, query_string=parsed.query)
                 with Timeout(self.node_timeout):
                     return conn.getresponse()
             except (Exception, TimeoutError), err:
-                print "get response of GET or misc Error: %s" % err
+                self.logger.debug("get response of GET or misc Error: %s" % err)
                 return HTTPGatewayTimeout(request=self.req)
 
 
@@ -210,8 +210,7 @@ class Dispatcher(object):
         self.req_version_str = 'v1.0'
         self.req_auth_str = 'auth'
         self.merged_combinator_str = '__@@__'
-        #self.put_object_max_size = MAX_FILE_SIZE
-        self.put_object_max_size = 5120
+        self.no_split_copy_max_size = int(conf.get('no_split_copy_max_size', MAX_FILE_SIZE))
         self.loc = Location(self.relay_rule)
 
     def __call__(self, env, start_response):
@@ -452,7 +451,7 @@ class Dispatcher(object):
         to_req = req
         obj_size = int(from_resp.headers['content-length'])
         # if smaller then MAX_FILE_SIZE
-        if obj_size < self.put_object_max_size:
+        if obj_size < self.no_split_copy_max_size:
             return self._create_put_req(to_req, location, 
                                         cont_prefix, each_tokens, 
                                         from_real_path_ls[1], container, obj, query,
@@ -462,7 +461,7 @@ class Dispatcher(object):
         if large object, split object and upload them.
         (swift 1.4.3 api: Direct API Management of Large Objects)
         """
-        max_segment = obj_size / self.put_object_max_size + 1
+        max_segment = obj_size / self.no_split_copy_max_size + 1
         cur = str(time.time())
         body = StringIO(from_resp.body)
         for seg in range(max_segment):
@@ -472,7 +471,7 @@ class Dispatcher(object):
             """
             split_obj = '%s/%s/%s/%08d' % (obj, cur, obj_size, seg)
             split_obj_name = quote(split_obj, '')
-            chunk = body.read(self.put_object_max_size)
+            chunk = body.read(self.no_split_copy_max_size)
             to_resp = self._create_put_req(to_req, location, 
                                            cont_prefix, each_tokens, 
                                            from_real_path_ls[1], container, 
@@ -799,10 +798,10 @@ class Dispatcher(object):
             else:
                 proxy = None
 
-            self.logger.info('Req: %s %s, Connect to %s via %s' % 
+            self.logger.debug('Req: %s %s, Connect to %s via %s' % 
                              (req.method, req.url, connect_url, proxy))
 
-            result = RelayRequest(req, connect_url, proxy=proxy, 
+            result = RelayRequest(self.conf, req, connect_url, proxy=proxy, 
                                   conn_timeout=self.conn_timeout, node_timeout=self.node_timeout)()
 
             if isinstance(result, HTTPException):
@@ -813,8 +812,6 @@ class Dispatcher(object):
                     continue
                 else:
                     return result
-
-            #print result.getheader('content-length')
 
             response = Response(status='%s %s' % (result.status, result.reason))
             response.bytes_transferred = 0
