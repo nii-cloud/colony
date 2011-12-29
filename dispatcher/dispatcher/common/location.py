@@ -1,8 +1,8 @@
 # coding=utf-8
 import os
 from urlparse import urlparse
-#from dispatcher.common.fastestmirror import FastestMirror
 import time
+import socket
 
 class Location(object):
 
@@ -147,7 +147,7 @@ class Location(object):
                         webcache_svrs[swift] = webcache
                         container_prefix[parsed.scheme + '://' + parsed.netloc] = prefix
                         swift_ls.append(swift)
-                        #swift_ls = FastestMirror(swift_ls).get_mirrorlist()
+                    swift_ls = self._sock_connect_faster(swift_ls)
                     location[loc_prefix.strip()]['swift'].append(swift_ls)
                     location[loc_prefix.strip()]['webcache'] = webcache_svrs
                     location[loc_prefix.strip()]['container_prefix'] = container_prefix
@@ -169,6 +169,28 @@ class Location(object):
             else:
                 file_age = tmp_file_age
         return file_age
+
+    def _sock_connect_faster(self, urls, conn_timeout=0.1):
+        faster = []
+        for url in urls:
+            nl = urlparse(url).netloc.split(':')
+            scheme = urlparse(url).scheme
+            addr = (nl[0], nl[1]) if len(nl) == 2 \
+                else (nl[0], 80 if scheme == 'http' else 443)
+            now = time.time()
+            try:
+                sock = None
+                sock = socket.create_connection(addr, conn_timeout)
+                then = time.time()
+            except socket.error:
+                then = time.time() + 86400
+            finally:
+                if sock:
+                    sock.close()
+            delta = then - now
+            faster.append((delta, url))
+        faster.sort()
+        return [f[1] for f in faster]
 
 if __name__ == "__main__":
     location_str = ':etc/server0.txt, local:etc/server1.txt, both:(hoge)etc/server2.txt (gere)etc/server3.txt'
@@ -194,3 +216,4 @@ if __name__ == "__main__":
     #print loc.container_prefixes_of('local')
     #print loc.container_prefixes_of('both')
     #print loc.servers_by_container_prefix_of('both', 'hoge')
+    #print loc._sock_connect_faster(['http://172.30.112.168:8080', 'http://172.30.112.170:8080', 'http://172.30.112.157'])
