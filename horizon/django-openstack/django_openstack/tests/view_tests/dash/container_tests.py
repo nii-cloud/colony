@@ -32,6 +32,8 @@ class ContainerViewTests(base.BaseViewTests):
         super(ContainerViewTests, self).setUp()
         self.container = self.mox.CreateMock(api.Container)
         self.container.name = 'containerName'
+        self.object = self.mox.CreateMock(api.SwiftObject)
+        self.object.name = 'objectName'
 
     def test_index(self):
         self.mox.StubOutWithMock(api, 'swift_get_containers')
@@ -94,6 +96,63 @@ class ContainerViewTests(base.BaseViewTests):
                                           args=['tenant']))
 
         self.mox.VerifyAll()
+
+    def test_container_public_get(self):
+        self.mox.StubOutWithMock(api, 'swift_get_container')
+        api.swift_get_container(
+                IsA(http.HttpRequest), self.container.name).AndReturn(self.container)
+
+        self.mox.StubOutWithMock(api, 'swift_get_objects')
+        api.swift_get_objects(
+                IsA(http.HttpRequest), self.container.name).AndReturn([self.object])
+                
+        self.mox.ReplayAll()
+
+        res = self.client.get(reverse('dash_containers_public',
+                              args=['tenant', self.container.name]))
+
+        self.assertTemplateUsed(res, 'django_openstack/dash/containers/publica.html')
+        self.mox.VerifyAll()
+
+    def test_container_meta_get(self):
+        self.mox.StubOutWithMock(api, 'swift_get_container')
+        api.swift_get_container(
+                IsA(http.HttpRequest), self.container.name).AndReturn(self.container)
+
+        self.mox.ReplayAll()
+
+        res = self.client.get(reverse('dash_containers_meta',
+                              args=['tenant', self.container.name]))
+
+        self.assertTemplateUsed(res, 'django_openstack/dash/containers/meta.html')
+        self.mox.VerifyAll()
+
+    def test_container_acl_get(self):
+        self.mox.StubOutWithMock(api, 'swift_get_container')
+        ret_container = self.container
+        ret_container.headers = [('x-container-read','test'), ('x-container-write', 'fuga') ]
+        api.swift_get_container(
+                IsA(http.HttpRequest), self.container.name).AndReturn(ret_container)
+
+        self.mox.ReplayAll()
+
+        res = self.client.get(reverse('dash_containers_acl',
+                              args=['tenant', self.container.name]))
+
+        self.assertTemplateUsed(res, 'django_openstack/dash/containers/acl.html')
+        self.mox.VerifyAll()
+
+
+    def test_contianer_acl_put(self):
+        formData = {'container_name' : 'containerName',
+                    'acl_add' : 'test',
+                    'read_acl' : 'test'}
+        self.mox.StubOutWithMock(api, 'swift_set_container_info')
+        api.swift_set_container_info(
+                    IsA(http.HttpRequest), self.container.name, {})
+        res = self.client.post(reverse('dash_containers_acl',
+                                       args=[self.request.user.tenant_id, self.container.name]),
+                                       formData) 
 
     def test_create_container_get(self):
         res = self.client.get(reverse('dash_containers_create',
