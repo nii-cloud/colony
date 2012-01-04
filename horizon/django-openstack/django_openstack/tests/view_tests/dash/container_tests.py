@@ -121,10 +121,8 @@ class ContainerViewTests(base.BaseViewTests):
         
         self.mox.ReplayAll()
             
-        res = self.client.post(reverse('dash_containers_public', args=['tenant'],
+        res = self.client.post(reverse('dash_containers_public', args=['tenant']),
                                        formData)
-        
-        
 
     def test_container_public_get(self):
         self.mox.StubOutWithMock(api, 'swift_get_container')
