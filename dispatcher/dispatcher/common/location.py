@@ -18,7 +18,7 @@ class Location(object):
 
     def reload(self):
         if self.check_file_age(self.location_str) > self.age:
-            self.locations, self.age = self._load(location_str)
+            self.locations, self.age = self._load(self.location_str)
 
     def servers_of(self, location_str):
         if location_str:
