@@ -115,9 +115,11 @@ class ContainerViewTests(base.BaseViewTests):
         self.mox.VerifyAll()
 
     def test_container_meta_get(self):
+        ret_container = self.container
+        ret_container.headers = [('x-container-meta-fuga','test'), ('x-container-meta-hoge', 'fuga') ]
         self.mox.StubOutWithMock(api, 'swift_get_container')
         api.swift_get_container(
-                IsA(http.HttpRequest), self.container.name).AndReturn(self.container)
+                IsA(http.HttpRequest), self.container.name).AndReturn(ret_container)
 
         self.mox.ReplayAll()
 
@@ -126,6 +128,28 @@ class ContainerViewTests(base.BaseViewTests):
 
         self.assertTemplateUsed(res, 'django_openstack/dash/containers/meta.html')
         self.mox.VerifyAll()
+
+    def test_container_meta_remove(self):
+        formData = {'container_name' : 'containerName',
+                    'method' : 'ContainerMetaRemove',
+                    'header_name' : 'x-container-meta-test' }
+        self.mox.StubOutWithMock(api, 'swift_set_container_info')
+        api.swift_set_container_info(
+                    IsA(http.HttpRequest), self.container.name, {})
+        res = self.client.post(reverse('dash_containers_meta',
+                                       args=[self.request.user.tenant_id, self.container.name]),
+                                       formData) 
+    def test_container_meta_put(self):
+        formData = {'container_name' : 'containerName',
+                    'method' : 'ContainerMeta',
+                    'header_name' : 'x-container-meta-test',
+                    'header_value' : 'hoge' }
+        self.mox.StubOutWithMock(api, 'swift_set_container_info')
+        api.swift_set_container_info(
+                    IsA(http.HttpRequest), self.container.name, {})
+        res = self.client.post(reverse('dash_containers_meta',
+                                       args=[self.request.user.tenant_id, self.container.name]),
+                                       formData) 
 
     def test_container_acl_get(self):
         self.mox.StubOutWithMock(api, 'swift_get_container')
@@ -145,6 +169,7 @@ class ContainerViewTests(base.BaseViewTests):
 
     def test_contianer_acl_put(self):
         formData = {'container_name' : 'containerName',
+                    'method' : 'ContainerAcl',
                     'acl_add' : 'test',
                     'read_acl' : 'test'}
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
@@ -154,6 +179,18 @@ class ContainerViewTests(base.BaseViewTests):
                                        args=[self.request.user.tenant_id, self.container.name]),
                                        formData) 
 
+    def test_container_acl_remove(self):
+        formData = {'container_name' : 'containerName',
+                    'method' : 'ContainerAcl',
+                    'header_name' : 'X-Container-Write',
+                    'read_acl' : 'test'}
+        self.mox.StubOutWithMock(api, 'swift_set_container_info')
+        api.swift_set_container_info(
+                    IsA(http.HttpRequest), self.container.name, {})
+        res = self.client.post(reverse('dash_containers_acl',
+                                       args=[self.request.user.tenant_id, self.container.name]),
+                                       formData) 
+        
     def test_create_container_get(self):
         res = self.client.get(reverse('dash_containers_create',
                               args=['tenant']))
