@@ -20,6 +20,7 @@ class UserAPI(BaseLdapAPI, BaseUserAPI):
         'password': 'userPassword',
         'email': 'mail',
         'enabled': 'keystoneEnabled',
+        'name': 'keystoneName'
     }
     attribute_ignore = ['tenant_id']
 
@@ -31,12 +32,42 @@ class UserAPI(BaseLdapAPI, BaseUserAPI):
         return obj
 
     def get_by_name(self, name, filter=None):
-        return self.get(name, filter)
+         users = self.get_all('(keystoneName=%s)' % \
+                             (ldap.filter.escape_filter_chars(name),))
+         try:
+             return users[0]
+         except IndexError:
+             return None
 
     def create(self, values):
-        # Persist the 'name' as the UID
-        values['id'] = values['name']
-        delattr(values, 'name')
+        id_list = [0]
+
+        conn = self.api.get_connection()
+        query = '(objectClass=keystoneUser)'
+        list = conn.search_s(self.tree_dn, ldap.SCOPE_ONELEVEL, query)
+        for dn, attrs in list:
+            id_list.append(int(self.api.user._dn_to_id(dn)))
+        
+        id_list.sort()
+        id_max = id_list[-1]
+
+        if id_max == id_list.index(id_max):
+            values['id'] = str(id_max + 1)
+        else:
+            id_data = id_tmp = id_max / 2
+            while True:
+                id_tmp = id_tmp / 2
+                if id_tmp == 0:
+                    id_tmp = 1
+                if id_list.count(id_data) == 0:
+                    values['id'] = str(id_data)
+                    break
+                else:
+                    if id_data == id_list.index(id_data):
+                        id_data += id_tmp
+                    else:
+                        id_data -= id_tmp
+
         utils.set_hashed_password(values)
         values = super(UserAPI, self).create(values)
         if values['tenant_id'] is not None:

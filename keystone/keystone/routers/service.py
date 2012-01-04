@@ -21,6 +21,7 @@ from keystone.common import wsgi
 import keystone.backends as db
 from keystone.controllers.auth import AuthController
 from keystone.controllers.tenant import TenantController
+from keystone.controllers.user import UserController
 from keystone.controllers.version import VersionController
 from keystone.controllers.staticfiles import StaticFilesController
 from keystone.controllers.extensions import ExtensionsController
@@ -51,6 +52,11 @@ class ServiceApi(wsgi.Router):
                         controller=tenant_controller,
                         action="get_tenants",
                         conditions=dict(method=["GET"]))
+        user_controller = UserController(options)
+        mapper.connect("/tenants/{tenant_id}/users",
+                    controller=user_controller,
+                    action="get_tenant_users",
+                    conditions=dict(method=["GET"]))
 
         # Miscellaneous Operations
         version_controller = VersionController(options)
