@@ -56,8 +56,7 @@ urlpatterns += patterns('django_openstack.dash.views.images',
 )
 
 urlpatterns += patterns('django_openstack.dash.views.images_metadata',
-    url(r'^(?P<tenant_id>[^/]+)/images_metadata/$', 'index', name='dash_images_metadata'),
-    url(IMAGES % 'launch', 'launch', name='dash_images_launch'),
+    url(r'^(?P<tenant_id>[^/]+)/images_metadata/$', 'index', name='dash_images_metadata')
 )
 
 urlpatterns += patterns('django_openstack.dash.views.keypairs',
