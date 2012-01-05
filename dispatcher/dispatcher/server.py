@@ -433,7 +433,8 @@ class Dispatcher(object):
         from_swift_svrs = self.loc.servers_by_container_prefix_of(location, cp_cont_prefix)
         from_token = each_tokens[self._get_servers_subscript_by_prefix(location, cp_cont_prefix)]
         from_real_path_ls = self._get_real_path(req)
-        from_real_path_ls[2] = container
+        from_real_path_ls[2] = cp_cont
+        from_real_path_ls[3] = cp_obj
         from_real_path = '/' + '/'.join(from_real_path_ls)
         from_url = self._combinate_url(req, from_swift_svrs[0], from_real_path, None)
         from_req.headers['x-auth-token'] = from_token
