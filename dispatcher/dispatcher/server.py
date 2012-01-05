@@ -527,15 +527,16 @@ class Dispatcher(object):
         path = self._get_real_path(req)[1:]
         if len(path) >= 3:
             account = path[0]
-            container = path[1]
+            container = unquote(path[1])
             obj = '/'.join(path[2:])
             cont_prefix = self._get_container_prefix(container)
-            real_container = container.split(cont_prefix + ':')[1] if cont_prefix else container
+            real_container = container.split(cont_prefix + self.combinater_char)[1] if cont_prefix else container
             return account, cont_prefix, real_container, obj
         if len(path) == 2:
             account, container = path
+            container = unquote(container)
             cont_prefix = self._get_container_prefix(container)
-            real_container = container.split(cont_prefix + ':')[1] if cont_prefix else container
+            real_container = container.split(cont_prefix + self.combinater_char)[1] if cont_prefix else container
             return account, cont_prefix, real_container, None
         if len(path) == 1:
             account = path
