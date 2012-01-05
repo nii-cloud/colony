@@ -54,73 +54,6 @@ class UploadMetadata(forms.SelfHandlingForm):
         messages.success(request, "Image Metadata was successfully registerd")
         return shortcuts.redirect(request.build_absolute_uri())
 
-class LaunchForm(forms.SelfHandlingForm):
-    name = forms.CharField(max_length=80, label="Server Name")
-    image_id = forms.CharField(widget=forms.HiddenInput())
-    tenant_id = forms.CharField(widget=forms.HiddenInput())
-    user_data = forms.CharField(widget=forms.Textarea,
-                                label="User Data",
-                                required=False)
-
-    # make the dropdown populate when the form is loaded not when django is
-    # started
-    def __init__(self, *args, **kwargs):
-        super(LaunchForm, self).__init__(*args, **kwargs)
-        flavorlist = kwargs.get('initial', {}).get('flavorlist', [])
-        self.fields['flavor'] = forms.ChoiceField(
-                choices=flavorlist,
-                label="Flavor",
-                help_text="Size of Image to launch")
-
-        keynamelist = kwargs.get('initial', {}).get('keynamelist', [])
-        self.fields['key_name'] = forms.ChoiceField(choices=keynamelist,
-                label="Key Name",
-                required=False,
-                help_text="Which keypair to use for authentication")
-
-        securitygrouplist = kwargs.get('initial', {}).get('securitygrouplist', [])
-        self.fields['security_groups'] = forms.MultipleChoiceField(choices=securitygrouplist,
-                label='Security Groups',
-                required=True,
-                initial=['default'],
-                widget=forms.SelectMultiple(attrs={'class': 'chzn-select',
-                                                   'style': "min-width: 200px"}),
-                help_text="Launch instance in these Security Groups")
-        # setting self.fields.keyOrder seems to break validation,
-        # so ordering fields manually
-        field_list = (
-            'name',
-            'user_data',
-            'flavor',
-            'key_name')
-        for field in field_list[::-1]:
-            self.fields.insert(0, field, self.fields.pop(field))
-
-    def handle(self, request, data):
-        image_id = data['image_id']
-        tenant_id = data['tenant_id']
-        try:
-            image = api.image_get(request, image_id)
-            flavor = api.flavor_get(request, data['flavor'])
-            api.server_create(request,
-                              data['name'],
-                              image,
-                              flavor,
-                              data.get('key_name'),
-                              normalize_newlines(data.get('user_data')),
-                              data.get('security_groups'))
-
-            msg = 'Instance was successfully launched'
-            LOG.info(msg)
-            messages.success(request, msg)
-            return redirect('dash_instances', tenant_id)
-
-        except api_exceptions.ApiException, e:
-            LOG.exception('ApiException while creating instances of image "%s"' %
-                      image_id)
-            messages.error(request,
-                           'Unable to launch instance: %s' % e.message)
-
 
 @login_required
 def index(request, tenant_id):
@@ -178,11 +111,11 @@ def download(request, tenant_id, image_id):
 
     response = http.HttpResponse()
     response['Content-Disposition'] = 'attachment; filename=image-%s.xml' % image.name
-    response.write("
+    response.write("""
         <image>
            <name>%s</name>
         </image>
-    ")
+    """)
 
     return response
 
@@ -195,4 +128,4 @@ def upload(request, tenant_id):
     return render_to_response(
     'django_openstack/dash/images_metadata/upload.html', {
        'upload_form': form,
-    |, context_instance=template.RequestContext(request))
+    }, context_instance=template.RequestContext(request))

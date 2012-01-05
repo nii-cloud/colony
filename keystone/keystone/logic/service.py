@@ -347,7 +347,8 @@ class IdentityService(object):
             return dtenant
 
     def get_tenant_users(self, admin_token, tenant_id, marker, limit, url):
-        self.__validate_admin_token(admin_token)
+        self.__validate_token(admin_token, False)
+        #self.__validate_admin_token(admin_token)
 
         if tenant_id == None:
             raise fault.BadRequestFault("Expecting a Tenant Id")

@@ -36,19 +36,36 @@ al.
 from django.conf import settings
 from django.contrib import messages
 
-import cloudfiles
-import glance.client
-import glance.common.exception as glance_exceptions
+try:
+    import cloudfiles
+except ImportError, e:
+    settings.SWIFT_ENABLED=False
+
+try:
+    import glance.client
+    import glance.common.exception as glance_exceptions
+except ImportError, e:
+    settings.IMAGE_METADATA_GLANCE_ENABLED=False
+
 import httplib
 import json
 import logging
-import openstack.compute
-import openstackx.admin
-import openstackx.api.exceptions as api_exceptions
-import openstackx.extras
-import openstackx.auth
-from novaclient.v1_1 import client
-import quantum.client
+
+try:
+    import openstack.compute
+    import openstackx.admin
+    import openstackx.api.exceptions as api_exceptions
+    import openstackx.extras
+    import openstackx.auth
+    from novaclient.v1_1 import client
+except ImportError, e:
+    settings.OPENSTACK_COMPUTE_ENABLED=False
+
+try:
+    import quantum.client
+except ImportError, e:
+    settings.QUANTUM_ENABLED=False
+
 from urlparse import urlparse
 
 LOG = logging.getLogger('django_openstack.api')

@@ -28,6 +28,14 @@ olcAttributeTypes: (
     SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
     SINGLE-VALUE
     )
+olcAttributeTypes: (
+    1.3.6.1.3.1.666.667.3.5
+    NAME 'keystoneName'
+    EQUALITY caseExactMatch
+    SUBSTR caseExactSubstringsMatch
+    SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+    SINGLE-VALUE
+    )
 olcObjectClasses: (
     1.3.6.1.3.1.666.667.4.1
     NAME 'keystoneUidObject'
@@ -40,7 +48,7 @@ olcObjectClasses: (
     NAME 'keystoneUser'
     SUP top
     AUXILIARY
-    MUST ( keystoneEnabled )
+    MUST ( keystoneName $ keystoneEnabled )
     MAY ( mail $ userPassword )
     )
 olcObjectClasses: (
@@ -55,7 +63,7 @@ olcObjectClasses: (
     NAME 'keystoneTenant'
     SUP top
     AUXILIARY
-    MUST ( keystoneEnabled )
+    MUST ( keystoneName $ keystoneEnabled )
     MAY ( member $ description )
     )
 olcObjectClasses: (

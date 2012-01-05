@@ -7,8 +7,19 @@ def get_url(req):
 
 
 def get_marker_limit_and_url(req):
-    marker = req.GET["marker"] if "marker" in req.GET else None
-    limit = req.GET["limit"] if "limit" in req.GET else 10
-    url = get_url(req)
+    if "marker" in req.GET:
+        marker = req.GET["marker"] 
+        if not marker.isdigit():
+            marker = None
+    else:
+        marker = None
 
-    return (marker, limit, url)
+    if "limit" in req.GET:
+        limit = req.GET["limit"] 
+        if not limit.isdigit():
+            limit = 10
+    else:
+        limit = 10
+    url = get_url(req)
+    
+    return (marker, int(limit), url)

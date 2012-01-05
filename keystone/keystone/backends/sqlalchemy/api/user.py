@@ -232,21 +232,19 @@ class UserAPI(BaseUserAPI):
         # Also the user lookup is nasty and potentially injectiable.
         if not session:
             session = get_session()
-        user = aliased(models.UserRoleAssociation)
+        user = aliased(models.User)
+
         if marker:
-            rv = session.query(user).\
-                         filter("tenant_id = :tenant_id").\
-                         params(tenant_id='%s' % tenant_id).\
-                         filter("id>=:marker").\
-                         params(marker='%s' % marker).\
-                         order_by("id").\
+            users = session.query(user).\
+                         filter_by(tenant_id = tenant_id).\
+                         filter("id > :marker").params(\
+                         marker='%s' % marker).order_by(user.id).\
                          limit(limit).\
                          all()
         else:
-            rv = session.query(user).\
-                         filter("tenant_id = :tenant_id").\
-                         params(tenant_id='%s' % tenant_id).\
-                         order_by("id").\
+            users = session.query(user).\
+                         filter_by(tenant_id = tenant_id).\
+                         order_by(user.id).\
                          limit(limit).\
                          all()
         user_ids = set([str(assoc.user_id) for assoc in rv])

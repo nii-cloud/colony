@@ -273,12 +273,12 @@ def meta(request, tenant_id, container_name):
 
 @login_required
 def acl(request, tenant_id, container_name):
-    container = api.swift_get_container(request, container_name)
 
     form, handled = ContainerAcl.maybe_handle(request)
     if handled:
         return handled
 
+    container = api.swift_get_container(request, container_name)
     read_ref, read_groups, write_ref, write_groups = [],[],[],[]
     read_acl, write_acl = '', ''
     for h,v in container.headers:

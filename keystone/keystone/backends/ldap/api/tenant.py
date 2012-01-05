@@ -13,14 +13,45 @@ class TenantAPI(BaseLdapAPI, BaseTenantAPI):
     options_name = 'tenant'
     object_class = 'keystoneTenant'
     model = models.Tenant
-    attribute_mapping = {'desc': 'description', 'enabled': 'keystoneEnabled'}
+    attribute_mapping = {'desc': 'description', 'enabled': 'keystoneEnabled',
+                         'name': 'keystoneName'}
 
     def get_by_name(self, name, filter=None):
-        return self.get(name, filter)
+         tenants = self.get_all('(keystoneName=%s)' % \
+                             (ldap.filter.escape_filter_chars(name),))
+         try:
+             return tenants[0]
+         except IndexError:
+             return None
 
     def create(self, values):
-        values['id'] = values['name']
-        delattr(values, 'name')
+        id_list = [0]
+
+        conn = self.api.get_connection()
+        query = '(objectClass=keystoneTenant)'
+        list = conn.search_s(self.tree_dn, ldap.SCOPE_ONELEVEL, query)
+        for dn, attrs in list:
+            id_list.append(int(self.api.tenant._dn_to_id(dn)))
+
+        id_list.sort()
+        id_max = id_list[-1]
+
+        if id_max == id_list.index(id_max):
+            values['id'] = str(id_max + 1)
+        else:
+            id_data = id_tmp = id_max / 2
+            while True:
+                id_tmp = id_tmp / 2
+                if id_tmp == 0:
+                    id_tmp = 1
+                if id_list.count(id_data) == 0:
+                    values['id'] = str(id_data)
+                    break
+                else:
+                    if id_data == id_list.index(id_data):
+                        id_data += id_tmp
+                    else:
+                        id_data -= id_tmp
 
         return super(TenantAPI, self).create(values)
 
