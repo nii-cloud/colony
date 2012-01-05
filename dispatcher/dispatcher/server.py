@@ -488,7 +488,7 @@ class Dispatcher(object):
         return self._create_put_req(to_req, location, 
                                     cont_prefix, each_tokens, 
                                     from_real_path_ls[1], container, obj, query,
-                                    None,
+                                    '',
                                     0)
 
 
