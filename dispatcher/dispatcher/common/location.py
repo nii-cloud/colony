@@ -7,18 +7,33 @@ import socket
 class Location(object):
 
     def __init__(self, location_str):
+        self.locations = None
         self.location_str = location_str
         self.locations, self.age = self._load(location_str)
+        if self.age == 0:
+            raise
         
     def __call__(self):
         pass
 
     def _load(self, location_str):
-        return self._parse_location_str(self.location_str)
+        locations = None
+        age = 0
+        try:
+            locations, age = self._parse_location_str(self.location_str)
+        except:
+            if self.locations != None:
+                return self.locations, age
+        return locations, age
 
     def reload(self):
         if self.check_file_age(self.location_str) > self.age:
-            self.locations, self.age = self._load(self.location_str)
+            locations, age = self._load(self.location_str)
+            if age == 0:
+                self.age = age
+            else:
+                self.locations = locations
+                self.age = age
 
     def servers_of(self, location_str):
         if location_str:
@@ -115,43 +130,49 @@ class Location(object):
         """
         location = {}
         file_age = None
-        for loc in location_str.split(','):
-            loc_prefix, files = loc.split(':')
-            location[loc_prefix.strip()] = {'swift': [], 'webcache': {}, 'container_prefix': {}}
-            webcache_svrs = {}
-            container_prefix = {}
-            for f in files.split(None):
-                prefix = None
-                if f.startswith('('):
-                    f_str = f.split(')')
-                    prefix = f_str[0].split('(')[1]
-                    f = f_str[1]
-                tmp_file_age = os.stat(f).st_mtime
-                if file_age:
-                    if file_age < tmp_file_age:
+        try:
+            for loc in location_str.split(','):
+                loc_prefix, files = loc.split(':')
+                location[loc_prefix.strip()] = {'swift': [], 'webcache': {}, 'container_prefix': {}}
+                webcache_svrs = {}
+                container_prefix = {}
+                for f in files.split(None):
+                    prefix = None
+                    if f.startswith('('):
+                        f_str = f.split(')')
+                        prefix = f_str[0].split('(')[1]
+                        f = f_str[1]
+                    tmp_file_age = os.stat(f).st_mtime
+                    if file_age:
+                        if file_age < tmp_file_age:
+                            file_age = tmp_file_age
+                    else:
                         file_age = tmp_file_age
-                else:
-                    file_age = tmp_file_age
-                with open(f) as fh:
-                    swift_ls = []
-                    for line in fh.readlines():
-                        if line.startswith('#'):
-                            continue
-                        svr_ls = line.split(',')
-                        if len(svr_ls) == 2:
-                            webcache = svr_ls[1].strip()
-                        else:
-                            webcache = None
-                        swift = svr_ls[0].strip()
-                        parsed = urlparse(swift)
-                        webcache_svrs[swift] = webcache
-                        container_prefix[parsed.scheme + '://' + parsed.netloc] = prefix
-                        swift_ls.append(swift)
-                    swift_ls = self._sock_connect_faster(swift_ls)
-                    location[loc_prefix.strip()]['swift'].append(swift_ls)
-                    location[loc_prefix.strip()]['webcache'] = webcache_svrs
-                    location[loc_prefix.strip()]['container_prefix'] = container_prefix
+                    with open(f) as fh:
+                        swift_ls = []
+                        for line in fh.readlines():
+                            if line.startswith('#'):
+                                continue
+                            svr_ls = line.split(',')
+                            if len(svr_ls) == 2:
+                                webcache = svr_ls[1].strip()
+                            else:
+                                webcache = None
+                            swift = svr_ls[0].strip()
+                            parsed = urlparse(swift)
+                            webcache_svrs[swift] = webcache
+                            container_prefix[parsed.scheme + '://' + parsed.netloc] = prefix
+                            swift_ls.append(swift)
+                        swift_ls = self._sock_connect_faster(swift_ls)
+                        location[loc_prefix.strip()]['swift'].append(swift_ls)
+                        location[loc_prefix.strip()]['webcache'] = webcache_svrs
+                        location[loc_prefix.strip()]['container_prefix'] = container_prefix
+        except ValueError:
+            raise
+        except OSError:
+            raise
         return location, file_age
+
 
     def check_file_age(self, location_str):
         """ """

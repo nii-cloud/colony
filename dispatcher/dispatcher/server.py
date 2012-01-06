@@ -207,16 +207,24 @@ class Dispatcher(object):
         self.node_timeout = int(conf.get('node_timeout', 11))
         self.conn_timeout = float(conf.get('conn_timeout', 0.5))
         self.client_timeout = int(conf.get('client_timeout', 60))
+        #client_chunk_size
+        #object_chunk_size
         self.req_version_str = 'v1.0'
         self.req_auth_str = 'auth'
         self.merged_combinator_str = '__@@__'
         self.no_split_copy_max_size = int(conf.get('no_split_copy_max_size', MAX_FILE_SIZE))
-        self.loc = Location(self.relay_rule)
+        #self.no_split_copy_max_size = int(conf.get('swift_store_large_chunk_size', MAX_FILE_SIZE))
+        try:
+            self.loc = Location(self.relay_rule)
+        except:
+            raise ValueError, 'dispatcher relay rule is invalid.'
 
     def __call__(self, env, start_response):
         """ """
         req = Request(env)
         self.loc.reload()
+        if self.loc.age == 0:
+            self.logger.warn('dispatcher relay rule is invalid, using old rules now.')
         loc_prefix = self.location_check(req)
         if self.loc.is_merged(loc_prefix):
             self.logger.debug('enter merge mode')
