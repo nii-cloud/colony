@@ -59,7 +59,7 @@ try:
     import openstackx.auth
     from novaclient.v1_1 import client
 except ImportError, e:
-    seggings.OPENSTACK_COMPUTE_ENABLED=False
+    settings.OPENSTACK_COMPUTE_ENABLED=False
 
 try:
     import quantum.client

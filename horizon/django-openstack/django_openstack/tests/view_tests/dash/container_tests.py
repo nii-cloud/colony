@@ -97,6 +97,33 @@ class ContainerViewTests(base.BaseViewTests):
 
         self.mox.VerifyAll()
 
+    def test_container_public_put(self):
+        
+        formData = {'container_name':'containerName',
+                    'method':'MakePublicContainer',
+                    'index_object_name' : 'index',
+                        'css_object_name' : 'index'}
+
+        self.mox.StubOutWithMock(api, 'swift_get_container')
+        api.swift_get_container(
+                                IsA(http.HttpRequest), self.container.name
+                                ).AndReturn(self.container)
+        
+        self.mox.StubOutWithMock(api, 'swift_get_objects')
+        api.swift_get_objects(
+                              IsA(http.HttpRequest), self.container.name
+                              ).AndReturn([self.object])
+
+        self.mox.StubOutWithMock(api, 'swift_set_container_info')
+        api.swift_set_container_info(
+                                     IsA(http.HttpRequest), self.container.name,
+                                     {})
+        
+        self.mox.ReplayAll()
+            
+        res = self.client.post(reverse('dash_containers_public', args=['tenant']),
+                                       formData)
+
     def test_container_public_get(self):
         self.mox.StubOutWithMock(api, 'swift_get_container')
         api.swift_get_container(
@@ -111,8 +138,9 @@ class ContainerViewTests(base.BaseViewTests):
         res = self.client.get(reverse('dash_containers_public',
                               args=['tenant', self.container.name]))
 
-        self.assertTemplateUsed(res, 'django_openstack/dash/containers/publica.html')
+        self.assertTemplateUsed(res, 'django_openstack/dash/containers/public.html')
         self.mox.VerifyAll()
+
 
     def test_container_meta_get(self):
         ret_container = self.container
