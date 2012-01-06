@@ -540,7 +540,7 @@ class Dispatcher(object):
             real_container = container.split(cont_prefix + self.combinater_char)[1] if cont_prefix else container
             return account, cont_prefix, real_container, None
         if len(path) == 1:
-            account = path
+            account = path[0]
             return account, None, None, None
         return None, None, None, None
 
