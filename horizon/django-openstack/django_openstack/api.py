@@ -316,7 +316,7 @@ def get_endpoint_index_by_region(request, service):
     region = None
     try:
         region = request.session['region']
-    except KeyError:
+    except (KeyError, AttributeError):
         pass
     if not region:
         return 0
