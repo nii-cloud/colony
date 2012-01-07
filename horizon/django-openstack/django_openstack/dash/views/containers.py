@@ -286,6 +286,10 @@ def acl(request, tenant_id, container_name):
     if handled:
         return handled
 
+    remove_form, handled = ContainerAclRemove.maybe_handle(request)
+    if handled:
+        return handled
+
     container = api.swift_get_container(request, container_name)
     read_ref, read_groups, write_ref, write_groups = [],[],[],[]
     read_acl, write_acl = '', ''
@@ -312,6 +316,7 @@ def acl(request, tenant_id, container_name):
 	'container_name' : container_name,
 	'container' : container,
 	'acl_form' : form,
+        'remove_form' : remove_form,
         'read_acl_ref' : read_ref,
         'read_acl_groups' : read_groups,
         'write_acl_ref' : write_ref,
