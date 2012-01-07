@@ -165,9 +165,12 @@ class ContainerViewTests(base.BaseViewTests):
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
         api.swift_set_container_info(
                     IsA(http.HttpRequest), self.container.name, {})
+        self.mox.ReplayAll()
         res = self.client.post(reverse('dash_containers_meta',
                                        args=[self.request.user.tenant_id, self.container.name]),
                                        formData) 
+        self.mox.VerifyAll()
+
     def test_container_meta_put(self):
         formData = {'container_name' : 'containerName',
                     'method' : 'ContainerMeta',
@@ -176,9 +179,11 @@ class ContainerViewTests(base.BaseViewTests):
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
         api.swift_set_container_info(
                     IsA(http.HttpRequest), self.container.name, {})
+        self.mox.ReplayAll()
         res = self.client.post(reverse('dash_containers_meta',
                                        args=[self.request.user.tenant_id, self.container.name]),
                                        formData) 
+        self.mox.VerifyAll()
 
     def test_container_acl_get(self):
         self.mox.StubOutWithMock(api, 'swift_get_container')
@@ -208,6 +213,9 @@ class ContainerViewTests(base.BaseViewTests):
         res = self.client.post(reverse('dash_containers_acl',
                                        args=[self.request.user.tenant_id, self.container.name]),
                                        formData) 
+        self.assertRedirectsNoFollow(res, reverse('dash_containers_acl',
+                                                  args=[self.request.user.tenant_id, self.container.name]))
+        self.mox.VerifyAll()
 
     def test_container_acl_remove(self):
         formData = {'container_name' : 'containerName',
@@ -223,6 +231,9 @@ class ContainerViewTests(base.BaseViewTests):
         res = self.client.post(reverse('dash_containers_acl',
                                        args=[self.request.user.tenant_id, self.container.name]),
                                        formData) 
+        self.assertRedirectsNoFollow(res, reverse('dash_containers_acl',
+                                                  args=[self.request.user.tenant_id, self.container.name]))
+        self.mox.VerifyAll()
         
     def test_create_container_get(self):
         res = self.client.get(reverse('dash_containers_create',

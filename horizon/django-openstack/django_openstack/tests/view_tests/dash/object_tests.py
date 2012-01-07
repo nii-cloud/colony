@@ -237,6 +237,10 @@ class ObjectViewTests(base.BaseViewTests):
                                       args=[self.TEST_TENANT,
                                             self.CONTAINER_NAME,
                                             OBJECT_NAME]), formData)
+        self.assertRedirectsNoFollow(res, reverse('dash_objects_meta',
+                                                  args=[self.TEST_TENANT,
+                                                        self.CONTAINER_NAME,
+                                                        OBJECT_NAME]))
 
         self.mox.VerifyAll()
 
