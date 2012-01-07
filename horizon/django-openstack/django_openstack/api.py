@@ -332,7 +332,8 @@ def url_for(request, service_type, admin=False):
     if service:
         i = get_endpoint_index_by_region(request, service)
         try:
-            request.session['region'] = service['endpoints'][i]['region']
+            if getattr(request, 'session', None) and request.session.has_key('region'):
+                request.session['region'] = service['endpoints'][i]['region']
             if admin:
                 return service['endpoints'][i]['adminURL']
             else:
