@@ -1,4 +1,10 @@
 <form id="acl_html"  method="post">
+  <div id="radio">
+     <input type="radio" name="acltype" id="readhoge" />
+     <label for="readhoge">Read ACL</label>
+     <input type="radio" name="acltype" id="writehoge" />
+     <label for="writehoge">Write ACL</label>
+  </div>
   {% csrf_token %}
   {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
     {% for field in form.visible_fields %}

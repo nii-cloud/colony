@@ -88,9 +88,9 @@
      <h4>ACL Type:</h4>
        <tr><td>
      <div id="radio">
-       <input type="radio" name="readacl" id="readacl" />
+       <input type="radio" name="acltype" id="readacl" />
        <label for="readacl">Read ACL</label>
-       <input type="radio" name="writeacl" id="writeacl" />
+       <input type="radio" name="acltype" id="writeacl" />
        <label for="writeacl">Write ACL</label>
      </div></td>
        </tr>
@@ -112,7 +112,7 @@
            primary: "ui-icon-circle-close" }});
         $("#radio").buttonset( {
         icons: {
-           primary: "ui-icon-circle-close"
+           primary: "ui-icon-circle-close",
            secondary: "ui-icon-circle-close" }
         });
     })

@@ -45,8 +45,8 @@ class FilterObjects(forms.SelfHandlingForm):
         object_prefix = data['object_prefix'] or None
 
         objects = api.swift_get_objects(request,
-                                        data['container_name'],
-                                        prefix=object_prefix)
+                                        data['container_name'].encode('utf-8'),
+                                        prefix=object_prefix.encode('utf-8'))
 
         if not objects:
             messages.info(request,
@@ -80,7 +80,7 @@ class UploadObject(forms.SelfHandlingForm):
         api.swift_upload_object(
                 request,
                 data['container_name'],
-                data['name'],
+                data['name'].encode('utf-8'),
                 self.files['object_file'].read())
 
         messages.success(request, "Object was successfully uploaded.")

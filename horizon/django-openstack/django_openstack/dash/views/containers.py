@@ -169,13 +169,16 @@ class MakePublicContainer(forms.SelfHandlingForm):
         super(MakePublicContainer, self).__init__(*args, **kwargs)
         self.fields['index_object_name'].choices = objects
         self.fields['css_object_name'].choices = objects
-        for name, value in headers.iteritems():
+
+        for name, value in headers:
             name = name.lower()
-            if name == 'x-container-meta-web-listing':
-                self.fields['html_listing'] = value == 'true'
             if name == 'x-container-meta-web-index':
-                self.fields['index_object_name'].initial = ( value, value )
+                self.fields['public_html'].initial = True
+                self.fields['index_object_name'].initial = ( value, value)
+            if name == 'x-container-meta-web-listing':
+                self.fields['html_listing'].initial = value == 'true'
             if name == 'x-container-meta-web-listing-css':
+                self.fields['use_css_in_listing'].initial = True
                 self.fields['css_object_name'].initial = ( value, value )
             if name == 'x-container-meta-web-error':
                 self.fields['error'].value = value
