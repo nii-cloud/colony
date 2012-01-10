@@ -80,7 +80,7 @@ import keystone.tools.tracer  # @UnusedImport # module runs on import
 
 from keystone.common.bufferedhttp import http_connect_raw as http_connect
 from swift.common.middleware.acl import clean_acl, parse_acl, referrer_allowed
-from swift.common.utils import cache_from_env, split_path, TRUE_VALUES
+from swift.common.utils import cache_from_env, split_path, TRUE_VALUES, get_logger
 
 PROTOCOL_NAME = "Token Authentication"
 
@@ -142,6 +142,7 @@ class AuthProtocol(object):
         # add by colony. conf tokens be simple.
         self.conf = conf
         self.app = app
+        self.logger = get_logger(conf, log_route='auth_token_colony')
         keystone_url = conf.get('keystone_url')
         parsed = urlparse(keystone_url)
         self.auth_netloc = parsed.netloc
@@ -200,9 +201,10 @@ class AuthProtocol(object):
         self._decorate_request('X_USER',
                                username, env, proxy_headers)
         env['REMOTE_USER'] = '%s:%s,%s,%s' % \
-            (tenant, username, tenant, \
-                 'AUTH_%s' % tenant if self.admin_role in roles else '')
-        env['swift.authorize'] = self.authorize
+            (tenant, username, tenant, '')
+            # (tenant, username, tenant, \
+            #      'AUTH_%s' % tenant if self.admin_role in roles else '')
+        env['swift.authorize'] = self.authorize_colony
         env['swift.clean_acl'] = clean_acl
         return self.app(env, start_response)
 
@@ -541,6 +543,59 @@ class AuthProtocol(object):
         return '/'.join(parsed.path.split('/')[:3]) == '/v1.0/AUTH_%s' % tenant
 
 
+    def authorize_colony(self, req):
+        """ 
+        add by colony.
+         1. All user GET or HEAD account.
+         2. All user create a container.
+         3. All user read or write objects with no contaner acl.
+         4. But any user are limited by container acl if exists.
+        """
+        try:
+            version, account, container, obj = split_path(req.path, 1, 4, True)
+        except ValueError:
+            return HTTPNotFound(request=req)
+        if not account:
+            self.logger.info('no account')
+            return self.denied_response(req)
+        user_groups = (req.remote_user or '').split(',')
+        self.logger.info('request_remote_user: %s' % req.remote_user)
+        self.logger.info('request_method: %s' % req.method)
+        # all user has normal authority, but 'swift_owner'.
+        req.environ['swift_owner'] = True
+        # Any user GET or HEAD account
+        if req.method in ['HEAD', 'GET'] and not container:
+            self.logger.info('HEAD or GET account all ok')
+            return None
+        # Any user creates container
+        if req.method in ['PUT', 'POST', 'DELETE'] and container and not obj:
+            self.logger.info('Any user create container')
+            return None
+        if hasattr(req, 'acl'):
+            self.logger.info('container acl: %s' % req.acl)
+            referrers, groups = parse_acl(req.acl)
+            self.logger.info('referrers: %s' % referrers)
+            self.logger.info('group: %s' % groups)
+            if referrer_allowed(req.referer, referrers):
+                if obj or '.rlistings' in groups:
+                    self.logger.info('referer_allowed')
+                    return None
+                return self.denied_response(req)
+            if not req.remote_user:
+                return self.denied_response(req)
+            for user_group in user_groups:
+                if user_group in groups:
+                    self.logger.info('group_allowed: %s' % user_group)
+                    return None
+            if not referrers and not groups:
+                self.logger.info('no acl allow default access')
+                return None
+            self.logger.info('group not allowed.')
+            return self.denied_response(req)
+        self.logger.info('request forbidden')
+        return self.denied_response(req)
+
+
     def authorize(self, req):
         """ 
         add by colony.
@@ -556,6 +611,7 @@ class AuthProtocol(object):
         user_groups = (req.remote_user or '').split(',')
         print 'request_remote_user: %s' % req.remote_user
         print 'request_method: %s' % req.method
+        print 'acl found 0' if hasattr(req, 'acl') else 'acl not found 0'
         # authority of admin.
         if account in user_groups and \
                 (req.method not in ('DELETE', 'PUT') or container):
@@ -563,6 +619,7 @@ class AuthProtocol(object):
             req.environ['swift_owner'] = True
             return None
         # authority of normal.
+        print 'acl found 1' if hasattr(req, 'acl') else 'acl not found 1'
         if hasattr(req, 'acl'):
             print 'container acl: %s' % req.acl 
             referrers, groups = parse_acl(req.acl)
@@ -579,6 +636,7 @@ class AuthProtocol(object):
                 if user_group in groups:
                     print 'group_allowed: %s' % user_group
                     return None
+        print 'acl found 2' if hasattr(req, 'acl') else 'acl not found 2'
         print 'request forbidden'
         return self.denied_response(req)
 
