@@ -22,6 +22,13 @@
 Views for managing Swift containers.
 """
 import logging
+import time
+from urllib import quote
+
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
 
 from django import http
 from django import template
@@ -43,16 +50,20 @@ class FilterObjects(forms.SelfHandlingForm):
 
     def handle(self, request, data):
         object_prefix = data['object_prefix'] or None
+        container_name = data['container_name'] or None
+        if object_prefix:
+            object_prefix = object_prefix.encode('utf-8')
+        if container_name:
+            container_name = container_name.encode('utf-8')
 
         objects = api.swift_get_objects(request,
-                                        data['container_name'].encode('utf-8'),
-                                        prefix=object_prefix.encode('utf-8'))
+                                        container_name,
+                                        prefix=object_prefix)
 
         if not objects:
             messages.info(request,
                           'There are no objects matching that prefix in %s' %
                           data['container_name'])
-
         return objects
 
 
@@ -77,13 +88,38 @@ class UploadObject(forms.SelfHandlingForm):
     container_name = forms.CharField(widget=forms.HiddenInput())
 
     def handle(self, request, data):
-        api.swift_upload_object(
-                request,
-                data['container_name'],
-                data['name'].encode('utf-8'),
-                self.files['object_file'].read())
-
-        messages.success(request, "Object was successfully uploaded.")
+        try:
+            file = self.files['object_file']
+            cont = data['container_name']
+            cont = cont.encode('utf-8')
+            obj = data['name']
+            obj = obj.encode('utf-8')
+            messages.info(request, file.size)
+            if file.size > 1000:
+                try:
+                    seg = 0
+                    seg_cont = cont + '_segments'
+                    api.swift_create_container(request, seg_cont)
+                    for buf in file.chunks(1000):
+                        path = '%s/%s/%s/%08d' % (obj, time.time(), file.size, seg)
+                        path = quote(path)
+                        api.swift_upload_object(
+                            request,
+                            seg_cont,
+                            path,
+                            str(buf))
+                        ++seg;
+                except Exception as e:
+                    raise e
+            else:
+                 api.swift_upload_object(
+                     request,
+                     cont,
+                     obj,
+                     file.read())
+            messages.success(request, "Object was successfully uploaded.")
+        except Exception as e:
+            messages.error(request, "Upload Object was failed (%s)" % str(e))
         return shortcuts.redirect(request.build_absolute_uri())
 
 
