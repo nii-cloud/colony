@@ -200,6 +200,73 @@ class ObjectViewTests(base.BaseViewTests):
 
         self.mox.VerifyAll()
 
+    def test_meta_get(self):
+        OBJECT_NAME = 'objectName'
+        headers = {'x-object-meta-hoge': 'fuga'}
+        self.mox.StubOutWithMock(api, 'swift_get_object_info')
+        api.swift_get_object_info(IsA(http.HttpRequest),
+                                  unicode(self.CONTAINER_NAME),
+                                  OBJECT_NAME).AndReturn(headers)
+        self.mox.ReplayAll()
+
+        res = self.client.get(reverse('dash_objects_meta',
+                                      args=[self.TEST_TENANT,
+                                            self.CONTAINER_NAME,
+                                            OBJECT_NAME]))
+
+        self.mox.VerifyAll()
+                                  
+
+    def test_meta_put(self):
+        OBJECT_NAME = 'objectName'
+        formData = {'method' : 'ObjectMeta',
+                    'container_name' : self.CONTAINER_NAME,
+                    'object_name' : OBJECT_NAME,
+                    'header_name' : 'x-object-meta-hoge',
+                    'header_value' : 'object-meta-value'
+                   }
+        self.mox.StubOutWithMock(api, 'swift_set_object_info')
+        api.swift_set_object_info(IsA(http.HttpRequest),
+                                  unicode(self.CONTAINER_NAME),
+                                  OBJECT_NAME,
+                                  { 'x-object-meta-hoge' : '' }
+                                 )
+        self.mox.ReplayAll()
+
+        res = self.client.post(reverse('dash_objects_meta',
+                                      args=[self.TEST_TENANT,
+                                            self.CONTAINER_NAME,
+                                            OBJECT_NAME]), formData)
+        self.assertRedirectsNoFollow(res, reverse('dash_objects_meta',
+                                                  args=[self.TEST_TENANT,
+                                                        self.CONTAINER_NAME,
+                                                        OBJECT_NAME]))
+
+        self.mox.VerifyAll()
+
+    def test_meta_remove(self):
+
+        OBJECT_NAME = 'objectName'
+        formData = {'method' : 'ObjectMetaRemove',
+                    'container_name' : self.CONTAINER_NAME,
+                    'object_name' : OBJECT_NAME,
+                    'header_name' : 'x-object-meta-hoge'
+                   }
+        self.mox.StubOutWithMock(api, 'swift_set_object_info')
+        api.swift_set_object_info(IsA(http.HttpRequest),
+                                  unicode(self.CONTAINER_NAME),
+                                  OBJECT_NAME,
+                                  { 'x-object-meta-hoge' : '' }
+                                 )
+        self.mox.ReplayAll()
+
+        res = self.client.post(reverse('dash_objects_meta',
+                                      args=[self.TEST_TENANT,
+                                            self.CONTAINER_NAME,
+                                            OBJECT_NAME]), formData)
+
+        self.mox.VerifyAll()
+
     def test_filter(self):
         PREFIX = 'prefix'
 

@@ -32,6 +32,7 @@ class ContainerViewTests(base.BaseViewTests):
         super(ContainerViewTests, self).setUp()
         self.container = self.mox.CreateMock(api.Container)
         self.container.name = 'containerName'
+        self.container.headers = {}
         self.object = self.mox.CreateMock(api.SwiftObject)
         self.object.name = 'objectName'
 
@@ -98,7 +99,7 @@ class ContainerViewTests(base.BaseViewTests):
         self.mox.VerifyAll()
 
     def test_container_public_put(self):
-        
+       
         formData = {'container_name':'containerName',
                     'method':'MakePublicContainer',
                     'index_object_name' : 'index',
@@ -121,7 +122,7 @@ class ContainerViewTests(base.BaseViewTests):
         
         self.mox.ReplayAll()
             
-        res = self.client.post(reverse('dash_containers_public', args=['tenant']),
+        res = self.client.post(reverse('dash_containers_public', args=['tenant', self.container.name]),
                                        formData)
 
     def test_container_public_get(self):
@@ -164,9 +165,12 @@ class ContainerViewTests(base.BaseViewTests):
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
         api.swift_set_container_info(
                     IsA(http.HttpRequest), self.container.name, {})
+        self.mox.ReplayAll()
         res = self.client.post(reverse('dash_containers_meta',
                                        args=[self.request.user.tenant_id, self.container.name]),
                                        formData) 
+        self.mox.VerifyAll()
+
     def test_container_meta_put(self):
         formData = {'container_name' : 'containerName',
                     'method' : 'ContainerMeta',
@@ -175,9 +179,11 @@ class ContainerViewTests(base.BaseViewTests):
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
         api.swift_set_container_info(
                     IsA(http.HttpRequest), self.container.name, {})
+        self.mox.ReplayAll()
         res = self.client.post(reverse('dash_containers_meta',
                                        args=[self.request.user.tenant_id, self.container.name]),
                                        formData) 
+        self.mox.VerifyAll()
 
     def test_container_acl_get(self):
         self.mox.StubOutWithMock(api, 'swift_get_container')
@@ -203,21 +209,31 @@ class ContainerViewTests(base.BaseViewTests):
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
         api.swift_set_container_info(
                     IsA(http.HttpRequest), self.container.name, {})
+        self.mox.ReplayAll()
         res = self.client.post(reverse('dash_containers_acl',
                                        args=[self.request.user.tenant_id, self.container.name]),
                                        formData) 
+        self.assertRedirectsNoFollow(res, reverse('dash_containers_acl',
+                                                  args=[self.request.user.tenant_id, self.container.name]))
+        self.mox.VerifyAll()
 
     def test_container_acl_remove(self):
         formData = {'container_name' : 'containerName',
-                    'method' : 'ContainerAcl',
+                    'method' : 'ContainerAclRemove',
                     'header_name' : 'X-Container-Write',
                     'read_acl' : 'test'}
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
         api.swift_set_container_info(
                     IsA(http.HttpRequest), self.container.name, {})
+       
+        self.mox.ReplayAll()
+ 
         res = self.client.post(reverse('dash_containers_acl',
                                        args=[self.request.user.tenant_id, self.container.name]),
                                        formData) 
+        self.assertRedirectsNoFollow(res, reverse('dash_containers_acl',
+                                                  args=[self.request.user.tenant_id, self.container.name]))
+        self.mox.VerifyAll()
         
     def test_create_container_get(self):
         res = self.client.get(reverse('dash_containers_create',

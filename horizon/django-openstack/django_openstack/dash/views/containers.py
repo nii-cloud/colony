@@ -165,12 +165,23 @@ class MakePublicContainer(forms.SelfHandlingForm):
 
     def __init__(self, *args, **kwargs):
         objects = kwargs.pop('objects')
+        headers = kwargs.pop('headers')
         super(MakePublicContainer, self).__init__(*args, **kwargs)
         self.fields['index_object_name'].choices = objects
         self.fields['css_object_name'].choices = objects
-        headers = kwargs.pop('headers')
-        if headers['X-Container-Meta-Web-Listing'] == 'true':
-           self.fields['html_listing']
+
+        for name, value in headers:
+            name = name.lower()
+            if name == 'x-container-meta-web-index':
+                self.fields['public_html'].initial = True
+                self.fields['index_object_name'].initial = ( value, value)
+            if name == 'x-container-meta-web-listing':
+                self.fields['html_listing'].initial = value == 'true'
+            if name == 'x-container-meta-web-listing-css':
+                self.fields['use_css_in_listing'].initial = True
+                self.fields['css_object_name'].initial = ( value, value )
+            if name == 'x-container-meta-web-error':
+                self.fields['error'].value = value
 
     def handle(self, request, data):
         hdrs = {}
@@ -186,7 +197,7 @@ class MakePublicContainer(forms.SelfHandlingForm):
         if html_listing:
            hdrs['X-Container-Meta-Web-Listing'] = 'true'
         if use_css_in_listing:
-           hdrs['X-Container-Meta-Web-Listing-Css']
+           hdrs['X-Container-Meta-Web-Listing-Css'] = css_object_name
         if error:
            hdrs['X-Container-Meta-Web-Error'] = error
 
@@ -278,6 +289,10 @@ def acl(request, tenant_id, container_name):
     if handled:
         return handled
 
+    remove_form, handled = ContainerAclRemove.maybe_handle(request)
+    if handled:
+        return handled
+
     container = api.swift_get_container(request, container_name)
     read_ref, read_groups, write_ref, write_groups = [],[],[],[]
     read_acl, write_acl = '', ''
@@ -301,9 +316,10 @@ def acl(request, tenant_id, container_name):
 
     return shortcuts.render_to_response(
     'django_openstack/dash/containers/acl.html', {
-		'container_name' : container_name,
-		'container' : container,
-		'acl_form' : form,
+	'container_name' : container_name,
+	'container' : container,
+	'acl_form' : form,
+        'remove_form' : remove_form,
         'read_acl_ref' : read_ref,
         'read_acl_groups' : read_groups,
         'write_acl_ref' : write_ref,
