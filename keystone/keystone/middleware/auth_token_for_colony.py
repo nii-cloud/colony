@@ -264,7 +264,7 @@ class AuthProtocol(object):
         token = {'auth': {'token': {'id': auth_token}, 'tenantId': ''}}
         req_headers = {'Content-type': 'application/json', 'Accept': 'text/json'}
         connect = httplib.HTTPConnection if self.auth_protocol == 'http' else httplib.HTTPSConnection
-        conn = connect('%s' % self.auth_netloc)
+        conn = connect('%s' % self.auth_netloc, timeout=10)
         conn.request('POST', '/v2.0/tokens', json.dumps(token), req_headers)
         resp = conn.getresponse()
         if resp.status == 200:
