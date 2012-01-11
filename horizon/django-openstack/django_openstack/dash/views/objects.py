@@ -22,8 +22,6 @@
 Views for managing Swift containers.
 """
 import logging
-import time
-from urllib import quote
 
 try:
     from cStringIO import StringIO
@@ -94,29 +92,7 @@ class UploadObject(forms.SelfHandlingForm):
             cont = cont.encode('utf-8')
             obj = data['name']
             obj = obj.encode('utf-8')
-            messages.info(request, file.size)
-            if file.size > 1000:
-                try:
-                    seg = 0
-                    seg_cont = cont + '_segments'
-                    api.swift_create_container(request, seg_cont)
-                    for buf in file.chunks(1000):
-                        path = '%s/%s/%s/%08d' % (obj, time.time(), file.size, seg)
-                        path = quote(path)
-                        api.swift_upload_object(
-                            request,
-                            seg_cont,
-                            path,
-                            str(buf))
-                        ++seg;
-                except Exception as e:
-                    raise e
-            else:
-                 api.swift_upload_object(
-                     request,
-                     cont,
-                     obj,
-                     file.read())
+            api.swift_upload_object_with_manifest(request, cont, obj, file)
             messages.success(request, "Object was successfully uploaded.")
         except Exception as e:
             messages.error(request, "Upload Object was failed (%s)" % str(e))
