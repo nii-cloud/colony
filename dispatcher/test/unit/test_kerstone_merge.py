@@ -5,13 +5,10 @@ try:
 except (ImportError):
     import unittest
 from dispatcher.server import Dispatcher as server
-from dispatcher.common.middleware.keystone_merge import KeystoneMerge as ksm
 from dispatcher.common.middleware.keystone_merge import filter_factory
 from eventlet import sleep, spawn, TimeoutError, util, wsgi, listen
 from swift.common.utils import normalize_timestamp, NullLogger
-from test import get_config
 from webob import Request, Response
-from webtest import TestApp
 import json
 from urlparse import urlparse
 
@@ -34,10 +31,7 @@ def setUp(self):
 def tearDown(self):
     for s in _servers:
         s.kill()
-    pass
 
-def tearDown(self):
-    pass
 
 class DummyApp(object):
     """ """
@@ -62,7 +56,6 @@ class DummySrv(object):
         if req.path == '/v2.0/tokens':
             body = json.dumps(self.body)
         else:
-            raise
             body = 'no auth token request'
         status = '200 OK'
         start_response(status, [('content-type', 'application/json')])
@@ -77,7 +70,6 @@ class TestController(unittest.TestCase):
                 'dispatcher_base_url': 'http://192.168.2.1:10000',
                 'region_name': 'RegionOne'}
         self.k = filter_factory(conf)(DummyApp())
-        #self.assertEqual(dir(self.k),'')
 
     def tearDown(self):
         pass
