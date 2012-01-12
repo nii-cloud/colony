@@ -360,13 +360,13 @@ class TestController(unittest.TestCase):
     #@unittest.skip
     def test_19_REQUEST_merge_COPY_object_across_accounts_with_split_upload(self):
         """ relay to copy object across accounts with split uploading. """
-        no_split_copy_max_size = self.app.app.no_split_copy_max_size
+        swift_store_large_chunk_size  = self.app.app.swift_store_large_chunk_size
         self.app.app.no_split_copy_max_size = 15
         res = self.app.request('/both/v1.0/AUTH_test/gere:TEST1/copied_test0.txt', method='PUT', body='',
                                headers={'X_Auth_Token': 't__@@__v',
                                         'X_Copy_From': '/hoge:TEST0/test0.txt'},
                                expect_errors=True)
-        self.app.app.no_split_copy_max_size = no_split_copy_max_size
+        self.app.app.swift_store_large_chunk_size = swift_store_large_chunk_size
         print proxy0_srv.env
         print proxy0_srv.env['REQUEST_METHOD']
         print proxy0_srv.env['PATH_INFO']

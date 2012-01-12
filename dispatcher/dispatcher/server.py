@@ -58,9 +58,9 @@ class RelayRequest(object):
         host, port = parsed_url.netloc.split(':')
         if not port:
             if parsed_url.scheme == 'http':
-                port = 80
+                port = '80'
             elif parsed_url.scheme == 'https':
-                port = 443
+                port = '443'
             else:
                 return None, None
         return host, port
@@ -204,16 +204,14 @@ class Dispatcher(object):
         self.ssl_enabled = True if 'cert_file' in conf else False
         self.relay_rule = conf.get('relay_rule')
         self.combinater_char = conf.get('combinater_char', ':')
-        self.node_timeout = int(conf.get('node_timeout', 11))
+        self.node_timeout = int(conf.get('node_timeout', 10))
         self.conn_timeout = float(conf.get('conn_timeout', 0.5))
         self.client_timeout = int(conf.get('client_timeout', 60))
-        #client_chunk_size
-        #object_chunk_size
+        self.client_chunk_size = int(conf.get('client_chunk_size', 65536))
         self.req_version_str = 'v1.0'
         self.req_auth_str = 'auth'
         self.merged_combinator_str = '__@@__'
-        self.no_split_copy_max_size = int(conf.get('no_split_copy_max_size', MAX_FILE_SIZE))
-        #self.no_split_copy_max_size = int(conf.get('swift_store_large_chunk_size', MAX_FILE_SIZE))
+        self.swift_store_large_chunk_size = int(conf.get('swift_store_large_chunk_size', MAX_FILE_SIZE))
         try:
             self.loc = Location(self.relay_rule)
         except:
@@ -460,7 +458,7 @@ class Dispatcher(object):
         to_req = req
         obj_size = int(from_resp.headers['content-length'])
         # if smaller then MAX_FILE_SIZE
-        if obj_size < self.no_split_copy_max_size:
+        if obj_size < self.swift_store_large_chunk_size:
             return self._create_put_req(to_req, location, 
                                         cont_prefix, each_tokens, 
                                         from_real_path_ls[1], container, obj, query,
@@ -470,7 +468,7 @@ class Dispatcher(object):
         if large object, split object and upload them.
         (swift 1.4.3 api: Direct API Management of Large Objects)
         """
-        max_segment = obj_size / self.no_split_copy_max_size + 1
+        max_segment = obj_size / self.swift_store_large_chunk_size + 1
         cur = str(time.time())
         body = StringIO(from_resp.body)
         for seg in range(max_segment):
@@ -480,7 +478,7 @@ class Dispatcher(object):
             """
             split_obj = '%s/%s/%s/%08d' % (obj, cur, obj_size, seg)
             split_obj_name = quote(split_obj, '')
-            chunk = body.read(self.no_split_copy_max_size)
+            chunk = body.read(self.swift_store_large_chunk_size)
             to_resp = self._create_put_req(to_req, location, 
                                            cont_prefix, each_tokens, 
                                            from_real_path_ls[1], container, 
@@ -812,7 +810,9 @@ class Dispatcher(object):
                              (req.method, req.url, connect_url, proxy))
 
             result = RelayRequest(self.conf, req, connect_url, proxy=proxy, 
-                                  conn_timeout=self.conn_timeout, node_timeout=self.node_timeout)()
+                                  conn_timeout=self.conn_timeout, 
+                                  node_timeout=self.node_timeout,
+                                  chunk_size=self.client_chunk_size)()
 
             if isinstance(result, HTTPException):
                 if relay_servers_count > 1:
@@ -829,8 +829,8 @@ class Dispatcher(object):
             def response_iter():
                 try:
                     while True:
-                        with ChunkReadTimeout(60):
-                            chunk = result.read(65535)
+                        with ChunkReadTimeout(self.client_timeout):
+                            chunk = result.read(self.client_chunk_size)
                         if not chunk:
                             break
                         yield chunk
