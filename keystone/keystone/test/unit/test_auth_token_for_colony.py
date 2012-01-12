@@ -11,7 +11,6 @@ from webob import Request, Response
 import json
 from urlparse import urlparse
 from contextlib import contextmanager
-
 import httplib
 
 class TmpLogger():
@@ -21,7 +20,7 @@ class TmpLogger():
 
 def setUp(self):
     global keystone0_lis, keystone0_srv, keystone0_spa
-    nl = TmpLogger()
+    nl = NullLogger()
     keystone0_lis = listen(('localhost', 15000))
     keystone0_srv = DummySrv('http://127.0.0.1:15000')
     keystone0_spa = spawn(wsgi.server, keystone0_lis, keystone0_srv, nl)
@@ -67,9 +66,14 @@ class DummyApp(object):
         self.env = env
         req = Request(env)
         status = '200 OK'
-        return Response(status=status)
+        start_response(status, [('content-type', 'text/plain')])        
+        return ''
 
 class DummySrv(object):
+    """
+    BUG: unit tests can't access this dummy keystone. WHY?
+    workaround -> use a real keystone server.
+    """
     def __init__(self, base_url):
         self.base_url = base_url
         self.body = access_token0
@@ -113,15 +117,35 @@ class TestController(unittest.TestCase):
         self.assertEqual(env['HTTP_X_USER'], 'test')
         self.assertEqual(proxy_headers['X_USER'], 'test')
 
-    @unittest.skip
+    #@unittest.skip
     def test_validate_claims_each_user(self):
+        app = DummyApp()
+        conf = {'keystone_url': keystone_url,
+                'region_name': 'RegionOne',
+                'admin_role': 'Admin',
+                'memcache_expire': '86400'}
+        kauth = filter_factory(conf)(app)
         auth_user = ('test', 'tester', 'testing')
-        self.assertEqual(self.kauth._validate_claims_each_user(auth_user),'hoge')
+        headers, body = kauth._validate_claims_each_user(auth_user)
+        self.assertTrue(headers.has_key('X-Auth-Token'))
+        self.assertTrue(headers.has_key('X-Storage-Token'))
+        self.assertTrue(headers.has_key('X-Storage-Url'))
+        self.assertEqual(json.loads(body), 
+                         {'storage': 
+                          {'default': 'locals', 
+                           'locals': 'http://172.30.112.168:8080/v1.0/AUTH_test'}})
 
-    @unittest.skip
+    #@unittest.skip
     def test_authreq_to_keystone(self):
-        self.assertEqual(dir(keystone0_srv), '')
-        self.assertEqual(self.kauth._authreq_to_keystone('tester', 'testing'), 'hoge')
+        app = DummyApp()
+        conf = {'keystone_url': keystone_url,
+                'region_name': 'RegionOne',
+                'admin_role': 'Admin',
+                'memcache_expire': '86400'}
+        kauth = filter_factory(conf)(app)
+        access = kauth._authreq_to_keystone('tester', 'testing')
+        #self.assertEqual(access, access_token0)
+        self.assertTrue(access['access']['token']['id'])
 
     def test_get_auth_user(self):
         env = {'HTTP_X_AUTH_USER': 'test:tester', 
@@ -141,11 +165,21 @@ class TestController(unittest.TestCase):
                           ['Member'], 
                           'http://172.30.112.168:8080/v1.0/AUTH_test'))
 
-    @unittest.skip
+    #@unittest.skip
     def test_accession_by_auth_token(self):
-        env = {}
-        auth_token = 't'
-        self.kauth._accession_by_auth_token(env, auth_token)
+        app = DummyApp()
+        conf = {'keystone_url': keystone_url,
+                'region_name': 'RegionOne',
+                'admin_role': 'Admin',
+                'memcache_expire': '86400'}
+        kauth = filter_factory(conf)(app)
+        env = {'swift.cache': FakeMemcache()}
+        # auth_token = 't'
+        # self.assertEqual(kauth._accession_by_auth_token(env, auth_token), 
+        #                  ('test', 'tester', ['Member'], 'http://172.30.112.168:8080/v1.0/AUTH_test'))
+        auth_token = '999888777666'
+        self.assertEqual(kauth._accession_by_auth_token(env, auth_token), 
+                         ('admin', 'admin', ['Admin'], 'http://172.30.112.168:8080/v1.0/AUTH_admin'))
 
     def test_valid_account_owner(self):
         req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test')
@@ -264,22 +298,41 @@ class TestController(unittest.TestCase):
         resp = self.kauth.denied_response(req)
         self.assertEqual(resp.status, '401 Unauthorized')
 
-    @unittest.skip
+    #@unittest.skip
     def test_get_auth_token(self):
+        app = DummyApp()
+        conf = {'keystone_url': keystone_url,
+                'region_name': 'RegionOne',
+                'admin_role': 'Admin',
+                'memcache_expire': '86400'}
+        kauth = filter_factory(conf)(app)
         resp = Request.blank('/auth/v1.0',
                              headers={'X-Auth-User': 'test:tester',
-                                      'X-Auth-Key': 'testing'}).get_response(self.kauth)
-        self.assertEqual(resp.body, '')
+                                      'X-Auth-Key': 'testing'}).get_response(kauth)
+        self.assertEqual(json.loads(resp.body), 
+                         {'storage': 
+                          {'default': 'locals', 
+                           'locals': 'http://172.30.112.168:8080/v1.0/AUTH_test'}})
 
-    @unittest.skip
+    #@unittest.skip
     def test_connect_swift(self):
+        app = DummyApp()
+        conf = {'keystone_url': keystone_url,
+                'region_name': 'RegionOne',
+                'admin_role': 'Admin',
+                'memcache_expire': '86400'}
+        kauth = filter_factory(conf)(app)
         resp = Request.blank('/v1.0/AUTH_test',
-                             headers={'X-Auth-Token': 't'}).get_response(self.kauth)
-        self.assertEqual(resp.headers, '')
-
+                             headers={'X-Auth-Token': '999888777666'},
+                             environ={'swift.cache': FakeMemcache()}).get_response(kauth)
+        self.assertEqual(resp.status, '200 OK')
+        self.assertEqual(app.env['PATH_INFO'], '/v1.0/AUTH_test')
+        self.assertEqual(app.env['REMOTE_USER'], 'admin:admin,admin,')
 
 
 # test data
+keystone_url = 'http://172.30.112.168:5000'
+#keystone_url = 'http://127.0.0.1:15000'
 access_token0 = {'access': 
                  {'token': {'expires': '2012-01-09T19:11:27.058939', 
                             'id': '7af4f2ba-96e2-481f-87cc-85eb030c8b52', 
