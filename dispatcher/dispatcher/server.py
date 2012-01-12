@@ -44,12 +44,12 @@ class RelayRequest(object):
         self.retry_times_get_response_from_swift = 10
         self.logger = get_logger(conf, log_route='dispatcher.RelayRequest')
 
-    def proxy_request_check(self, proxy, method, path):
+    def _proxy_request_check(self, path):
         """
         using WebCache when 'Get Object' only.
 
         """
-        if proxy and method == 'GET' and len(path.split('/')) >= 5:
+        if self.proxy and self.method == 'GET' and len(path.split('/')) >= 5:
             return True
         else:
             return False
@@ -115,7 +115,7 @@ class RelayRequest(object):
         if self.proxy:
             proxy_parsed = urlparse(self.proxy)
 
-        if self.proxy_request_check(self.proxy, self.method, parsed.path):
+        if self._proxy_request_check(parsed.path):
             host, port = self.split_netloc(proxy_parsed)
             path = self.url
         else:
@@ -132,56 +132,57 @@ class RelayRequest(object):
             # pile.spawn(self._connect_server, host, port, self.method, path, self.headers, parsed.query)
             # conns = [conn for conn in pile if conn]
             # conn = conns[0]
-            with ConnectionTimeout(self.conn_timeout):
-                conn = http_connect_raw(host, port, self.method, path, 
-                                        headers=self.headers, query_string=parsed.query)
-            with ContextPool(1) as pool:
-                conn.failed = False
-                conn.queue = Queue(10)
-                pool.spawn(self._send_file, conn, path)
-                while True:
-                    with ChunkReadTimeout(self.client_timeout):
-                        try:
-                            chunk = next(data_source)
-                        except StopIteration:
-                            if chunked:
-                                conn.queue.put('0\r\n\r\n')
+            try:
+                with ConnectionTimeout(self.conn_timeout):
+                    conn = http_connect_raw(host, port, self.method, path, 
+                                            headers=self.headers, query_string=parsed.query)
+                with ContextPool(1) as pool:
+                    conn.failed = False
+                    conn.queue = Queue(10)
+                    pool.spawn(self._send_file, conn, path)
+                    while True:
+                        with ChunkReadTimeout(self.client_timeout):
+                            try:
+                                chunk = next(data_source)
+                            except StopIteration:
+                                if chunked:
+                                    conn.queue.put('0\r\n\r\n')
+                                break
+                            except Exception, err:
+                                self.logger.debug('Chunk Read Error: %s' % err)
+                        bytes_transferred += len(chunk)
+                        if bytes_transferred > MAX_FILE_SIZE:
+                            return HTTPRequestEntityTooLarge(request=self.req)
+                        if not conn.failed:
+                            conn.queue.put('%x\r\n%s\r\n' % (len(chunk), chunk) if chunked else chunk)
+                    while True:
+                        if conn.queue.empty():
                             break
+                        else:
+                            sleep(0.1)
+                    if conn.queue.unfinished_tasks:
+                        conn.queue.join()
+                # In heavy condition, getresponse() may fails, so it causes 'timed out' in eventlet.greenio.
+                # Checking a result of response and retrying prevent it. But is this reason of the error really?
+                resp = None
+                with Timeout(self.node_timeout):
+                    for i in range(self.retry_times_get_response_from_swift):
+                        self.logger.debug('Retry counter: %s' % i)
+                        try:
+                            resp = conn.getresponse()
                         except Exception, err:
-                            self.logger.debug('Chunk Read Error: %s' % err)
-                    bytes_transferred += len(chunk)
-                    if bytes_transferred > MAX_FILE_SIZE:
-                        return HTTPRequestEntityTooLarge(request=self.req)
-                    if not conn.failed:
-                        conn.queue.put('%x\r\n%s\r\n' % (len(chunk), chunk) if chunked else chunk)
-                while True:
-                    if conn.queue.empty():
-                        break
-                    else:
-                        sleep(0.1)
-                if conn.queue.unfinished_tasks:
-                    conn.queue.join()
-            # In heavy condition, getresponse() may fails, so it causes 'timed out' in eventlet.greenio.
-            # Checking a result of response and retrying prevent it. But is this reason of the error really?
-            resp = None
-            with Timeout(self.node_timeout):
-                for i in range(self.retry_times_get_response_from_swift):
-                    self.logger.debug('Retry counter: %s' % i)
-                    try:
-                        resp = conn.getresponse()
-                    except Exception, err:
-                        self.logger.debug('get response of PUT Error: %s' % err)
-                    if isinstance(resp, BufferedHTTPResponse):
-                        break
-                    else:
-                        sleep(0.1)
-            return resp
-            # except ChunkReadTimeout, err:
-            #     print "ChunkReadTimeout: %s" % err
-            #     return HTTPRequestTimeout(request=self.req)
-            # except (Exception, TimeoutError), err:
-            #     print "Error: %s" % err
-            #     return HTTPGatewayTimeout(request=self.req)
+                            self.logger.debug('get response of PUT Error: %s' % err)
+                        if isinstance(resp, BufferedHTTPResponse):
+                            break
+                        else:
+                            sleep(0.1)
+                return resp
+            except ChunkReadTimeout, err:
+                self.logger.debug("ChunkReadTimeout: %s" % err)
+                return HTTPRequestTimeout(request=self.req)
+            except (Exception, TimeoutError), err:
+                self.logger.debug("Error: %s" % err)
+                return HTTPGatewayTimeout(request=self.req)
         else:
             try:
                 with ConnectionTimeout(self.conn_timeout):
