@@ -44,12 +44,12 @@ class RelayRequest(object):
         self.retry_times_get_response_from_swift = 10
         self.logger = get_logger(conf, log_route='dispatcher.RelayRequest')
 
-    def proxy_request_check(self, proxy, method, path):
+    def _proxy_request_check(self, path):
         """
         using WebCache when 'Get Object' only.
 
         """
-        if proxy and method == 'GET' and len(path.split('/')) >= 5:
+        if self.proxy and self.method == 'GET' and len(path.split('/')) >= 5:
             return True
         else:
             return False
@@ -58,9 +58,9 @@ class RelayRequest(object):
         host, port = parsed_url.netloc.split(':')
         if not port:
             if parsed_url.scheme == 'http':
-                port = 80
+                port = '80'
             elif parsed_url.scheme == 'https':
-                port = 443
+                port = '443'
             else:
                 return None, None
         return host, port
@@ -115,7 +115,7 @@ class RelayRequest(object):
         if self.proxy:
             proxy_parsed = urlparse(self.proxy)
 
-        if self.proxy_request_check(self.proxy, self.method, parsed.path):
+        if self._proxy_request_check(parsed.path):
             host, port = self.split_netloc(proxy_parsed)
             path = self.url
         else:
@@ -132,56 +132,57 @@ class RelayRequest(object):
             # pile.spawn(self._connect_server, host, port, self.method, path, self.headers, parsed.query)
             # conns = [conn for conn in pile if conn]
             # conn = conns[0]
-            with ConnectionTimeout(self.conn_timeout):
-                conn = http_connect_raw(host, port, self.method, path, 
-                                        headers=self.headers, query_string=parsed.query)
-            with ContextPool(1) as pool:
-                conn.failed = False
-                conn.queue = Queue(10)
-                pool.spawn(self._send_file, conn, path)
-                while True:
-                    with ChunkReadTimeout(self.client_timeout):
-                        try:
-                            chunk = next(data_source)
-                        except StopIteration:
-                            if chunked:
-                                conn.queue.put('0\r\n\r\n')
+            try:
+                with ConnectionTimeout(self.conn_timeout):
+                    conn = http_connect_raw(host, port, self.method, path, 
+                                            headers=self.headers, query_string=parsed.query)
+                with ContextPool(1) as pool:
+                    conn.failed = False
+                    conn.queue = Queue(10)
+                    pool.spawn(self._send_file, conn, path)
+                    while True:
+                        with ChunkReadTimeout(self.client_timeout):
+                            try:
+                                chunk = next(data_source)
+                            except StopIteration:
+                                if chunked:
+                                    conn.queue.put('0\r\n\r\n')
+                                break
+                            except Exception, err:
+                                self.logger.debug('Chunk Read Error: %s' % err)
+                        bytes_transferred += len(chunk)
+                        if bytes_transferred > MAX_FILE_SIZE:
+                            return HTTPRequestEntityTooLarge(request=self.req)
+                        if not conn.failed:
+                            conn.queue.put('%x\r\n%s\r\n' % (len(chunk), chunk) if chunked else chunk)
+                    while True:
+                        if conn.queue.empty():
                             break
+                        else:
+                            sleep(0.1)
+                    if conn.queue.unfinished_tasks:
+                        conn.queue.join()
+                # In heavy condition, getresponse() may fails, so it causes 'timed out' in eventlet.greenio.
+                # Checking a result of response and retrying prevent it. But is this reason of the error really?
+                resp = None
+                with Timeout(self.node_timeout):
+                    for i in range(self.retry_times_get_response_from_swift):
+                        self.logger.debug('Retry counter: %s' % i)
+                        try:
+                            resp = conn.getresponse()
                         except Exception, err:
-                            self.logger.debug('Chunk Read Error: %s' % err)
-                    bytes_transferred += len(chunk)
-                    if bytes_transferred > MAX_FILE_SIZE:
-                        return HTTPRequestEntityTooLarge(request=self.req)
-                    if not conn.failed:
-                        conn.queue.put('%x\r\n%s\r\n' % (len(chunk), chunk) if chunked else chunk)
-                while True:
-                    if conn.queue.empty():
-                        break
-                    else:
-                        sleep(0.1)
-                if conn.queue.unfinished_tasks:
-                    conn.queue.join()
-            # In heavy condition, getresponse() may fails, so it causes 'timed out' in eventlet.greenio.
-            # Checking a result of response and retrying prevent it. But is this reason of the error really?
-            resp = None
-            with Timeout(self.node_timeout):
-                for i in range(self.retry_times_get_response_from_swift):
-                    self.logger.debug('Retry counter: %s' % i)
-                    try:
-                        resp = conn.getresponse()
-                    except Exception, err:
-                        self.logger.debug('get response of PUT Error: %s' % err)
-                    if isinstance(resp, BufferedHTTPResponse):
-                        break
-                    else:
-                        sleep(0.1)
-            return resp
-            # except ChunkReadTimeout, err:
-            #     print "ChunkReadTimeout: %s" % err
-            #     return HTTPRequestTimeout(request=self.req)
-            # except (Exception, TimeoutError), err:
-            #     print "Error: %s" % err
-            #     return HTTPGatewayTimeout(request=self.req)
+                            self.logger.debug('get response of PUT Error: %s' % err)
+                        if isinstance(resp, BufferedHTTPResponse):
+                            break
+                        else:
+                            sleep(0.1)
+                return resp
+            except ChunkReadTimeout, err:
+                self.logger.debug("ChunkReadTimeout: %s" % err)
+                return HTTPRequestTimeout(request=self.req)
+            except (Exception, TimeoutError), err:
+                self.logger.debug("Error: %s" % err)
+                return HTTPGatewayTimeout(request=self.req)
         else:
             try:
                 with ConnectionTimeout(self.conn_timeout):
@@ -204,19 +205,25 @@ class Dispatcher(object):
         self.ssl_enabled = True if 'cert_file' in conf else False
         self.relay_rule = conf.get('relay_rule')
         self.combinater_char = conf.get('combinater_char', ':')
-        self.node_timeout = int(conf.get('node_timeout', 11))
+        self.node_timeout = int(conf.get('node_timeout', 10))
         self.conn_timeout = float(conf.get('conn_timeout', 0.5))
         self.client_timeout = int(conf.get('client_timeout', 60))
+        self.client_chunk_size = int(conf.get('client_chunk_size', 65536))
         self.req_version_str = 'v1.0'
         self.req_auth_str = 'auth'
         self.merged_combinator_str = '__@@__'
-        self.no_split_copy_max_size = int(conf.get('no_split_copy_max_size', MAX_FILE_SIZE))
-        self.loc = Location(self.relay_rule)
+        self.swift_store_large_chunk_size = int(conf.get('swift_store_large_chunk_size', MAX_FILE_SIZE))
+        try:
+            self.loc = Location(self.relay_rule)
+        except:
+            raise ValueError, 'dispatcher relay rule is invalid.'
 
     def __call__(self, env, start_response):
         """ """
         req = Request(env)
         self.loc.reload()
+        if self.loc.age == 0:
+            self.logger.warn('dispatcher relay rule is invalid, using old rules now.')
         loc_prefix = self.location_check(req)
         if self.loc.is_merged(loc_prefix):
             self.logger.debug('enter merge mode')
@@ -433,7 +440,8 @@ class Dispatcher(object):
         from_swift_svrs = self.loc.servers_by_container_prefix_of(location, cp_cont_prefix)
         from_token = each_tokens[self._get_servers_subscript_by_prefix(location, cp_cont_prefix)]
         from_real_path_ls = self._get_real_path(req)
-        from_real_path_ls[2] = container
+        from_real_path_ls[2] = cp_cont
+        from_real_path_ls[3] = cp_obj
         from_real_path = '/' + '/'.join(from_real_path_ls)
         from_url = self._combinate_url(req, from_swift_svrs[0], from_real_path, None)
         from_req.headers['x-auth-token'] = from_token
@@ -451,7 +459,7 @@ class Dispatcher(object):
         to_req = req
         obj_size = int(from_resp.headers['content-length'])
         # if smaller then MAX_FILE_SIZE
-        if obj_size < self.no_split_copy_max_size:
+        if obj_size < self.swift_store_large_chunk_size:
             return self._create_put_req(to_req, location, 
                                         cont_prefix, each_tokens, 
                                         from_real_path_ls[1], container, obj, query,
@@ -461,7 +469,7 @@ class Dispatcher(object):
         if large object, split object and upload them.
         (swift 1.4.3 api: Direct API Management of Large Objects)
         """
-        max_segment = obj_size / self.no_split_copy_max_size + 1
+        max_segment = obj_size / self.swift_store_large_chunk_size + 1
         cur = str(time.time())
         body = StringIO(from_resp.body)
         for seg in range(max_segment):
@@ -471,7 +479,7 @@ class Dispatcher(object):
             """
             split_obj = '%s/%s/%s/%08d' % (obj, cur, obj_size, seg)
             split_obj_name = quote(split_obj, '')
-            chunk = body.read(self.no_split_copy_max_size)
+            chunk = body.read(self.swift_store_large_chunk_size)
             to_resp = self._create_put_req(to_req, location, 
                                            cont_prefix, each_tokens, 
                                            from_real_path_ls[1], container, 
@@ -487,7 +495,7 @@ class Dispatcher(object):
         return self._create_put_req(to_req, location, 
                                     cont_prefix, each_tokens, 
                                     from_real_path_ls[1], container, obj, query,
-                                    None,
+                                    '',
                                     0)
 
 
@@ -527,18 +535,19 @@ class Dispatcher(object):
         path = self._get_real_path(req)[1:]
         if len(path) >= 3:
             account = path[0]
-            container = path[1]
+            container = unquote(path[1])
             obj = '/'.join(path[2:])
             cont_prefix = self._get_container_prefix(container)
-            real_container = container.split(cont_prefix + ':')[1] if cont_prefix else container
+            real_container = container.split(cont_prefix + self.combinater_char)[1] if cont_prefix else container
             return account, cont_prefix, real_container, obj
         if len(path) == 2:
             account, container = path
+            container = unquote(container)
             cont_prefix = self._get_container_prefix(container)
-            real_container = container.split(cont_prefix + ':')[1] if cont_prefix else container
+            real_container = container.split(cont_prefix + self.combinater_char)[1] if cont_prefix else container
             return account, cont_prefix, real_container, None
         if len(path) == 1:
-            account = path
+            account = path[0]
             return account, None, None, None
         return None, None, None, None
 
@@ -802,7 +811,9 @@ class Dispatcher(object):
                              (req.method, req.url, connect_url, proxy))
 
             result = RelayRequest(self.conf, req, connect_url, proxy=proxy, 
-                                  conn_timeout=self.conn_timeout, node_timeout=self.node_timeout)()
+                                  conn_timeout=self.conn_timeout, 
+                                  node_timeout=self.node_timeout,
+                                  chunk_size=self.client_chunk_size)()
 
             if isinstance(result, HTTPException):
                 if relay_servers_count > 1:
@@ -819,8 +830,8 @@ class Dispatcher(object):
             def response_iter():
                 try:
                     while True:
-                        with ChunkReadTimeout(60):
-                            chunk = result.read(65535)
+                        with ChunkReadTimeout(self.client_timeout):
+                            chunk = result.read(self.client_chunk_size)
                         if not chunk:
                             break
                         yield chunk
