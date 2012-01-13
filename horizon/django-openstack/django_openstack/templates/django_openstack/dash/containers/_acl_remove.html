@@ -1,0 +1,9 @@
+<form id="meta_remove_{{header}}" class="form-delete"  method="post">
+  {% csrf_token %}
+  {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+  <input type="hidden" name="header_name" value="{{header}}" />
+  <input type="hidden" name="container_name" value="{{container_name}}" />
+  <div class="fuga">
+    <button id="meta_remove_{{header}}" type="submit" class="delete" value="Delete" title="{{header}}" style="font-size:10px">Remove</button>
+  </div>
+</form>
