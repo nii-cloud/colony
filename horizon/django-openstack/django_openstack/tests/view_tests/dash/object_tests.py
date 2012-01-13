@@ -229,7 +229,7 @@ class ObjectViewTests(base.BaseViewTests):
         api.swift_set_object_info(IsA(http.HttpRequest),
                                   unicode(self.CONTAINER_NAME),
                                   OBJECT_NAME,
-                                  { 'x-object-meta-hoge' : '' }
+                                  { 'x-object-meta-hoge' : 'object-meta-value' }
                                  )
         self.mox.ReplayAll()
 
