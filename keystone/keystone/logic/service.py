@@ -322,9 +322,13 @@ class IdentityService(object):
             raise fault.UserConflictFault(
                 "A user with that name already exists")
 
-        if api.USER.get_by_email(user.email):
-            raise fault.EmailConflictFault(
-                "A user with that email already exists")
+        if user.email is not None:
+            if len(user.email) == 0:
+                raise fault.BadRequestFault("Expecting a email")
+
+            if api.USER.get_by_email(user.email):
+                raise fault.EmailConflictFault(
+                    "A user with that email already exists")
 
         duser = models.User()
         duser.name = user.name
@@ -348,7 +352,6 @@ class IdentityService(object):
 
     def get_tenant_users(self, admin_token, tenant_id, marker, limit, url):
         self.__validate_token(admin_token, False)
-        #self.__validate_admin_token(admin_token)
 
         if tenant_id == None:
             raise fault.BadRequestFault("Expecting a Tenant Id")
@@ -414,6 +417,9 @@ class IdentityService(object):
         if not isinstance(user, User):
             raise fault.BadRequestFault("Expecting a User")
 
+        if not user.email:
+            raise fault.BadRequestFault("Expecting a Email")
+
         if user.email != duser.email and \
                 api.USER.get_by_email(user.email) is not None:
             raise fault.EmailConflictFault("Email already exists")
@@ -435,8 +441,14 @@ class IdentityService(object):
             raise fault.BadRequestFault("Expecting a User")
 
         duser = api.USER.get(user_id)
-        if duser == None:
+        if not duser:
             raise fault.ItemNotFoundFault("The user could not be found")
+
+        if not isinstance(user, User):
+            raise fault.BadRequestFault("Expecting a User")
+
+        if not user.password:
+            raise fault.BadRequestFault("Expecting a Password")
 
         values = {'password': user.password}
 
@@ -471,6 +483,9 @@ class IdentityService(object):
         duser = api.USER.get(user_id)
         if duser == None:
             raise fault.ItemNotFoundFault("The user could not be found")
+
+        if not user.tenant_id:
+            raise fault.BadRequestFault("Expecting a TenantID")
 
         self.validate_and_fetch_user_tenant(user.tenant_id)
         values = {'tenant_id': user.tenant_id}
