@@ -183,6 +183,9 @@ class TestController(unittest.TestCase):
                          loc._sock_connect_faster(['http://127.0.0.1:8080', 
                                                    'http://127.0.0.1:18080', 
                                                    'http://127.0.0.1:9999'])[2])
+        loc_str = ':test/server0.txt test/server1.txt'
+        loc = Location(loc_str)
+        self.assertEqual(True, loc.is_merged(''))
     
     def test_02_LOCATION_update_location(self):
         """ server.txt reload if update."""
@@ -199,7 +202,10 @@ class TestController(unittest.TestCase):
         self.assertEqual([['http://192.168.2.1:8080']], 
                          loc.swift_of('remote'))
 
-        
+    def test_LOCATION_invalid_location_file(self):
+        loc_str = ':test/server00.txt'
+        self.assertRaises(ValueError, Location, loc_str)
+
     # rewrite url
     def test_03_REWRITE_PATH_blank(self):
         """ rewrite path when location prefix is blank."""

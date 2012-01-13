@@ -1,9 +1,6 @@
 # coding=utf-8
 from __future__ import with_statement
-try:
-    import simplejson as json
-except ImportError:
-    import json
+import simplejson as json
 from base64 import urlsafe_b64encode, urlsafe_b64decode
 from urllib import quote, unquote, urlencode
 from urlparse import urlparse, urlunparse, parse_qs
@@ -15,14 +12,12 @@ from webob.exc import HTTPException, HTTPAccepted, HTTPBadRequest, \
     HTTPBadGateway,  HTTPRequestEntityTooLarge, HTTPServerError
 from eventlet import GreenPile, Queue, sleep, TimeoutError
 from eventlet.timeout import Timeout
-#from eventlet.green.httplib import HTTPConnection, HTTPResponse, HTTPSConnection
 from swift.common.utils import get_logger, ContextPool
 from swift.common.exceptions import ConnectionTimeout, ChunkReadTimeout, ChunkWriteTimeout
 from swift.common.constraints import CONTAINER_LISTING_LIMIT, MAX_ACCOUNT_NAME_LENGTH, \
     MAX_CONTAINER_NAME_LENGTH, MAX_FILE_SIZE
 from swift.common.bufferedhttp import http_connect_raw, BufferedHTTPConnection, BufferedHTTPResponse
 from swift.proxy.server import update_headers
-from dispatcher.common.fastestmirror import FastestMirror
 from dispatcher.common.location import Location
 import os
 import sys
@@ -55,7 +50,11 @@ class RelayRequest(object):
             return False
 
     def split_netloc(self, parsed_url):
-        host, port = parsed_url.netloc.split(':')
+        if parsed_url.netloc.find(':') > 0:
+            host, port = parsed_url.netloc.split(':')
+        else:
+            host = parsed_url.netloc
+            port = None
         if not port:
             if parsed_url.scheme == 'http':
                 port = '80'
@@ -78,28 +77,6 @@ class RelayRequest(object):
                     conn.failed = True
                     self.logger.debug('Trying to write to %s' % path)
             conn.queue.task_done()
-
-    def _connect_server(self,  host, port, method, path, headers, query_string):
-        with ConnectionTimeout(self.conn_timeout):
-            conn = http_connect_raw(host, port, method, path, 
-                                    headers=headers, query_string=query_string)
-            return conn
-
-    def _connect_put_node(self, host, port, method, path, headers, query_string):
-        """Method for a file PUT connect"""
-        try:
-            with ConnectionTimeout(self.app.conn_timeout):
-                conn = http_connect_raw(host, port, method, path, 
-                                        headers=headers, query_string=query_string)
-            with Timeout(self.app.node_timeout):
-                resp = conn.getexpect()
-            if resp.status == 100:
-                conn.node = node
-                return conn
-            elif resp.status == 507:
-                self.error_limit(node)
-        except:
-            print 'Expect: 100-continue on %s' % path
 
 
     def __call__(self):

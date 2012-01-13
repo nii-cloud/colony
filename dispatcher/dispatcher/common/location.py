@@ -14,8 +14,6 @@ class Location(object):
         if self.age == 0:
             raise ValueError('initialize error.')
         
-    def __call__(self):
-        pass
 
     def _load(self, location_str):
         locations = None
@@ -226,6 +224,6 @@ class Location(object):
         faster.sort()
         return [f[1] for f in faster]
 
-if __name__ == "__main__":
-    location_str = ':etc/server0.txt, local:etc/server1.txt, both:(hoge)etc/server2.txt (gere)etc/server3.txt'
-    loc = Location(location_str)
+# if __name__ == "__main__":
+#     location_str = ':etc/server0.txt, local:etc/server1.txt, both:(hoge)etc/server2.txt (gere)etc/server3.txt'
+#     loc = Location(location_str)
