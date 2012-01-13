@@ -86,6 +86,7 @@ class AuthViewTests(base.BaseViewTests):
         self.assertTemplateUsed(res, 'splash.html')
 
         self.mox.VerifyAll()
+        self.mox.UnsetStubs()
 
     def test_login(self):
         NEW_TENANT_ID = '6'
@@ -96,12 +97,12 @@ class AuthViewTests(base.BaseViewTests):
                     'password': self.PASSWORD,
                     'username': self.TEST_USER}
 
-        self.mox.StubOutWithMock(api, 'token_create')
+        self.mox.StubOutWithMock(api, 'token_create_with_region')
         aToken = self.mox.CreateMock(api.Token)
         aToken.id = TOKEN_ID
         aToken.user = { 'roles': [{'name': 'fake'}]}
         aToken.serviceCatalog = {}
-        api.token_create(IsA(http.HttpRequest), "", self.TEST_USER,
+        api.token_create_with_region(IsA(http.HttpRequest), "", self.TEST_USER,
                          self.PASSWORD).AndReturn(aToken)
 
         aTenant = self.mox.CreateMock(api.Token)
@@ -112,8 +113,8 @@ class AuthViewTests(base.BaseViewTests):
         api.tenant_list_for_token(IsA(http.HttpRequest), aToken.id).\
                                   AndReturn([aTenant])
 
-        self.mox.StubOutWithMock(api, 'token_create_scoped_with_token')
-        api.token_create_scoped_with_token(IsA(http.HttpRequest), aTenant.id,
+        self.mox.StubOutWithMock(api, 'token_create_scoped_with_token_and_region')
+        api.token_create_scoped_with_token_and_region(IsA(http.HttpRequest), aTenant.id,
                          aToken.id).AndReturn(aToken)
 
 
@@ -124,15 +125,16 @@ class AuthViewTests(base.BaseViewTests):
         self.assertRedirectsNoFollow(res, reverse('dash_overview'))
 
         self.mox.VerifyAll()
+        self.mox.UnsetStubs()
 
     def test_login_invalid_credentials(self):
         form_data = {'method': 'Login',
                     'password': self.PASSWORD,
                     'username': self.TEST_USER}
 
-        self.mox.StubOutWithMock(api, 'token_create')
+        self.mox.StubOutWithMock(api, 'token_create_with_region')
         unauthorized = api_exceptions.Unauthorized('unauth', message='unauth')
-        api.token_create(IsA(http.HttpRequest), "", self.TEST_USER,
+        api.token_create_with_region(IsA(http.HttpRequest), "", self.TEST_USER,
                          self.PASSWORD).AndRaise(unauthorized)
 
         self.mox.ReplayAll()
@@ -142,16 +144,17 @@ class AuthViewTests(base.BaseViewTests):
         self.assertTemplateUsed(res, 'splash.html')
 
         self.mox.VerifyAll()
+        self.mox.UnsetStubs()
 
     def test_login_exception(self):
         form_data = {'method': 'Login',
                     'password': self.PASSWORD,
                     'username': self.TEST_USER}
 
-        self.mox.StubOutWithMock(api, 'token_create')
+        self.mox.StubOutWithMock(api, 'token_create_with_region')
         api_exception = api_exceptions.ApiException('apiException',
                                                     message='apiException')
-        api.token_create(IsA(http.HttpRequest), "", self.TEST_USER,
+        api.token_create_with_region(IsA(http.HttpRequest), "", self.TEST_USER,
                          self.PASSWORD).AndRaise(api_exception)
 
         self.mox.ReplayAll()
@@ -161,6 +164,7 @@ class AuthViewTests(base.BaseViewTests):
         self.assertTemplateUsed(res, 'splash.html')
 
         self.mox.VerifyAll()
+        self.mox.UnsetStubs()
 
     def test_switch_tenants_index(self):
         res = self.client.get(reverse('auth_switch', args=[self.TEST_TENANT]))
@@ -208,6 +212,7 @@ class AuthViewTests(base.BaseViewTests):
         self.assertEqual(self.client.session['tenant'], NEW_TENANT_NAME)
 
         self.mox.VerifyAll()
+        self.mox.UnsetStubs()
 
     def test_logout(self):
         KEY = 'arbitraryKeyString'
