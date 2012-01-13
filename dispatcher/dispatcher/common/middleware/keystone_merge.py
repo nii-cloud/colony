@@ -1,7 +1,4 @@
-try:
-    import simplejson as json
-except ImportError:
-    import json
+import simplejson as json
 from urlparse import urlparse, urlunparse
 from eventlet.green.httplib import HTTPConnection, HTTPResponse, HTTPSConnection
 from webob import Request, Response
@@ -110,6 +107,7 @@ class KeystoneMerge(object):
         """
         request = json.loads(req.body)
         creds = request['auth'] if request.has_key('auth') else request
+        resps = []
         if creds.has_key('token') and path == '/v2.0/tokens':
             # for recomfirming auth token
             merged_token = creds['token']['id']

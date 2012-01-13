@@ -167,6 +167,23 @@ class TestController(unittest.TestCase):
         self.assertEqual(srv.env['PATH_INFO'], '/v1.0/AUTH_test/TEST0/test0.txt')
 
 
+    def test_split_netloc(self):
+        conf = {}
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST0/test0.txt',
+                            method='GET')
+        connect_url = 'http://127.0.0.1:8080/v1.0/AUTH_test/TEST0/test0.txt'
+        r = rr(conf, req, connect_url, proxy='http://127.0.0.1:3128')
+        self.assertEqual(r.split_netloc(urlparse('http://192.168.2.1:8080/')), 
+                         ('192.168.2.1', '8080'))
+        self.assertEqual(r.split_netloc(urlparse('http://192.168.2.1/')),
+                         ('192.168.2.1', '80'))
+        self.assertEqual(r.split_netloc(urlparse('https://192.168.2.1/')),
+                         ('192.168.2.1', '443'))
+        self.assertEqual(r.split_netloc(urlparse('ftp://192.168.2.1/')),
+                         (None, None))
+
+
+
     def test_proxy_request_check(self):
         conf = {}
         req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST0/test0.txt',
