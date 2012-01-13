@@ -85,3 +85,6 @@ SWIFT_AUTHURL = 'http://swift/swiftapi/v1.0'
 
 OPENSTACK_KEYSTONE_URL = 'http://localhost:5000/v2.0/'
 OPENSTACK_KEYSTONE_ADMIN_URL = 'http://localhost:35357/v2.0'
+
+SWIFT_LARGE_OBJECT_SIZE = 1024 * 1024 * 5000
+
