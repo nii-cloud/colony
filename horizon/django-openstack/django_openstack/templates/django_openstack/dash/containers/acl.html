@@ -27,8 +27,8 @@
     <tr class="{%cycle 'odd' 'even' %}">
     <td><div class='ui-icon ui-icon-person'></div>{{ acl }}</td>
     <td id="actions" align="right" width="100px">
-      <div class="fuga">
-      <button style="font-size:10px">Remove</button>
+      <div class="form" style="margin: 0" width="100px">
+      {% include 'django_openstack/dash/containers/_acl_remove.html' with form=remove_form greetings="HI" %}
       </div>
     </td>
     </tr>

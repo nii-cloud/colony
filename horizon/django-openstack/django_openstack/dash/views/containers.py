@@ -137,15 +137,26 @@ class ContainerAcl(forms.SelfHandlingForm):
            type = 'X-Container-Write'
            acl_value = data['write_acl']
 
+        # clean and parse acl
         acl = clean_acl(type, data['acl_add'])
         acl_orig = clean_acl(type, acl_value)
         group_add, ref_add = parse_acl(acl)
         group_orig, ref_orig = parse_acl(acl_orig)
 
-        group_result = group_add + group_orig
-        ref_result = ref_add + ref_orig
+        # duplicate check
+        acl_result = []
+        acl_ref_result = []
+        for item in group_add:
+            if not item in group_orig:
+                acl_result.append(item)
+        for item in ref_add:
+            if not item in ref_orig:
+                acl_ref_result.append(item)
 
+        group_result = group_add + acl_result
+        ref_result = acl_ref_result + ref_orig
 
+        # set header
         hdrs = {}
         hdrs[type] = ','.join(group_result + ref_result)
         api.swift_set_container_info(request, container_name, hdrs)

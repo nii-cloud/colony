@@ -315,7 +315,7 @@ class ContainerViewTests(base.BaseViewTests):
                     'read_acl' : 'test'}
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
         api.swift_set_container_info(
-                    IsA(http.HttpRequest), self.container.name, { })
+                    IsA(http.HttpRequest), self.container.name, {'X-Container-Write':''})
        
         self.mox.ReplayAll()
  
