@@ -3,6 +3,7 @@ import os
 from urlparse import urlparse
 import time
 import socket
+import re
 
 class Location(object):
 
@@ -11,7 +12,7 @@ class Location(object):
         self.location_str = location_str
         self.locations, self.age = self._load(location_str)
         if self.age == 0:
-            raise
+            raise ValueError('initialize error.')
         
     def __call__(self):
         pass
@@ -21,19 +22,24 @@ class Location(object):
         age = 0
         try:
             locations, age = self._parse_location_str(self.location_str)
-        except:
+        except Exception, err:
             if self.locations != None:
+                print 'Error: %s go on using old location settings.' % err
                 return self.locations, age
+            print err
         return locations, age
 
     def reload(self):
-        if self.check_file_age(self.location_str) > self.age:
-            locations, age = self._load(self.location_str)
-            if age == 0:
-                self.age = age
-            else:
-                self.locations = locations
-                self.age = age
+        try:
+            if self.check_file_age(self.location_str) > self.age:
+                locations, age = self._load(self.location_str)
+                if age == 0:
+                    self.age = age
+                else:
+                    self.locations = locations
+                    self.age = age
+        except Exception, err:
+            print 'Error: %s go on using old location settings.' % err
 
     def servers_of(self, location_str):
         if location_str:
@@ -156,9 +162,13 @@ class Location(object):
                             svr_ls = line.split(',')
                             if len(svr_ls) == 2:
                                 webcache = svr_ls[1].strip()
+                                if not re.match('^http.?://.+', webcache):
+                                    raise ValueError('no url string.')
                             else:
                                 webcache = None
                             swift = svr_ls[0].strip()
+                            if not re.match('^http.?://.+', swift):
+                                raise ValueError('no url string.')
                             parsed = urlparse(swift)
                             webcache_svrs[swift] = webcache
                             container_prefix[parsed.scheme + '://' + parsed.netloc] = prefix
@@ -167,10 +177,12 @@ class Location(object):
                         location[loc_prefix.strip()]['swift'].append(swift_ls)
                         location[loc_prefix.strip()]['webcache'] = webcache_svrs
                         location[loc_prefix.strip()]['container_prefix'] = container_prefix
-        except ValueError:
-            raise
-        except OSError:
-            raise
+        except ValueError, err:
+            raise ValueError('location str format is wrong: %s' % err)
+        except OSError, err:
+            raise ValueError('server list file is missing: %s' % err)
+        except Exception, err:
+            raise ValueError('something happened: %s' % err)
         return location, file_age
 
 
@@ -192,6 +204,7 @@ class Location(object):
         return file_age
 
     def _sock_connect_faster(self, urls, conn_timeout=0.1):
+        """ """
         faster = []
         for url in urls:
             nl = urlparse(url).netloc.split(':')
@@ -216,25 +229,3 @@ class Location(object):
 if __name__ == "__main__":
     location_str = ':etc/server0.txt, local:etc/server1.txt, both:(hoge)etc/server2.txt (gere)etc/server3.txt'
     loc = Location(location_str)
-    print loc.locations
-    # print loc.age
-    # print loc.servers_of('')
-    # print loc.servers_of('local')
-    # print loc.servers_of('both')
-    # print loc.swift_of('')
-    # print loc.swift_of('local')
-    # print loc.swift_of('both')
-    # print loc.is_merged('')
-    # print loc.is_merged('local')
-    # print loc.is_merged('both')
-    #print loc.container_prefix_of('', 'http://172.30.112.168:8080')
-    #print loc.container_prefix_of('both', 'http://172.30.112.168:8080/v1.0/AUTH_test')
-    #print loc.container_prefix_of('both', 'http://172.30.112.170:8080')
-    # print loc.webcache_of('')
-    # print loc.webcache_of('local')
-    # print loc.webcache_of('both')
-    #print loc.container_prefixes_of('')
-    #print loc.container_prefixes_of('local')
-    #print loc.container_prefixes_of('both')
-    #print loc.servers_by_container_prefix_of('both', 'hoge')
-    #print loc._sock_connect_faster(['http://172.30.112.168:8080', 'http://172.30.112.170:8080', 'http://172.30.112.157'])
