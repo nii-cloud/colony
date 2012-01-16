@@ -178,6 +178,8 @@ class AuthProtocol(object):
         """
         tenant, user, password = auth_user
         auth_resp = self._authreq_to_keystone(user, password)
+        if not auth_resp:
+            return None
         auth_token, auth_tenant, username, roles, storage_url = self._get_swift_info(auth_resp, self.region_name) 
         if auth_tenant != tenant:
             return None
@@ -360,38 +362,25 @@ class AuthProtocol(object):
         except ValueError:
             return HTTPNotFound(request=req)
         if not account:
-            print 'no account'
             return self.denied_response(req)
         user_groups = (req.remote_user or '').split(',')
-        print 'request_remote_user: %s' % req.remote_user
-        print 'request_method: %s' % req.method
-        print 'acl found 0' if hasattr(req, 'acl') else 'acl not found 0'
         # authority of admin.
         if account in user_groups and \
                 (req.method not in ('DELETE', 'PUT') or container):
-            print 'authorize full through' 
             req.environ['swift_owner'] = True
             return None
         # authority of normal.
-        print 'acl found 1' if hasattr(req, 'acl') else 'acl not found 1'
         if hasattr(req, 'acl'):
-            print 'container acl: %s' % req.acl 
             referrers, groups = parse_acl(req.acl)
-            print 'referrers: %s' % referrers
-            print 'group: %s' % groups
             if referrer_allowed(req.referer, referrers):
                 if obj or '.rlistings' in groups:
-                    print 'referer_allowed'
                     return None
                 return self.denied_response(req)
             if not req.remote_user:
                 return self.denied_response(req)
             for user_group in user_groups:
                 if user_group in groups:
-                    print 'group_allowed: %s' % user_group
                     return None
-        print 'acl found 2' if hasattr(req, 'acl') else 'acl not found 2'
-        print 'request forbidden'
         return self.denied_response(req)
 
     def denied_response(self, req):
@@ -419,12 +408,3 @@ def app_factory(global_conf, **local_conf):
     conf = global_conf.copy()
     conf.update(local_conf)
     return AuthProtocol(None, conf)
-
-if __name__ == "__main__":
-    app = loadapp("config:" + \
-        os.path.join(os.path.abspath(os.path.dirname(__file__)),
-                     os.pardir,
-                     os.pardir,
-                    "examples/paste/auth_token.ini"),
-                    global_conf={"log_name": "auth_token.log"})
-    wsgi.server(eventlet.listen(('', 8090)), app)

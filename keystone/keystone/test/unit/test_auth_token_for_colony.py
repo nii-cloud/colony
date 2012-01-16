@@ -12,6 +12,7 @@ import json
 from urlparse import urlparse
 from contextlib import contextmanager
 import httplib
+from time import time
 
 class TmpLogger():
     def write(self, *args):
@@ -181,6 +182,52 @@ class TestController(unittest.TestCase):
         self.assertEqual(kauth._accession_by_auth_token(env, auth_token), 
                          ('admin', 'admin', ['Admin'], 'http://172.30.112.168:8080/v1.0/AUTH_admin'))
 
+        app = DummyApp()
+        conf = {'keystone_url': keystone_url,
+                'region_name': 'RegionOne',
+                'admin_role': 'Admin',
+                'memcache_expire': '0',
+                'across_account': 'no'}
+        kauth = filter_factory(conf)(app)
+        memcache = FakeMemcache()
+        env = {'swift.cache': memcache,
+               'SERVER_INFO': 'http://127.0.0.1',
+               'SCRIPT_NAME': '', 
+               'REQUEST_METHOD': 'GET', 
+               'PATH_INFO': '/auth/v1.0', 
+               'SERVER_PROTOCOL': 'HTTP/1.0', 
+               'SERVER_NAME': '127.0.0.1', 
+               'wsgi.url_scheme': 'http', 
+               'SERVER_PORT': '8080', 
+               'HTTP_HOST': '127.0.0.1:8080'}
+        auth_token = '999888777666'
+        memcache.set('auth/999888777666',
+                     (time() + 10000,
+                      'admin', 'admin', 'Admin',
+                      'http://172.30.112.168:8080/v1.0/AUTH_admin'),
+                     timeout=conf['memcache_expire'])
+        self.assertEqual(kauth._accession_by_auth_token(env, auth_token), None)
+
+        app = DummyApp()
+        conf = {'keystone_url': keystone_url,
+                'region_name': 'RegionOne',
+                'admin_role': 'Admin',
+                'memcache_expire': '86400',
+                'across_account': 'no'}
+        kauth = filter_factory(conf)(app)
+        env = {'swift.cache': FakeMemcache(),
+               'SERVER_INFO': 'http://127.0.0.1',
+               'SCRIPT_NAME': '', 
+               'REQUEST_METHOD': 'GET', 
+               'PATH_INFO': '/auth/v1.0', 
+               'SERVER_PROTOCOL': 'HTTP/1.0', 
+               'SERVER_NAME': '127.0.0.1', 
+               'wsgi.url_scheme': 'http', 
+               'SERVER_PORT': '8080', 
+               'HTTP_HOST': '127.0.0.1:8080'}
+        auth_token = '999888777666'
+        self.assertEqual(kauth._accession_by_auth_token(env, auth_token), None)
+
     def test_valid_account_owner(self):
         req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test')
         self.assertTrue(self.kauth.valid_account_owner(req, 'test'))
@@ -289,6 +336,93 @@ class TestController(unittest.TestCase):
         req.remote_user = 'test:tester,test,'
         self.assertEqual(self.kauth.authorize_colony(req).status, '403 Forbidden')
 
+
+    def test_authorize(self):
+        # url check
+        req = Request.blank('http://127.0.0.1:8080/')
+        self.assertEqual(self.kauth.authorize(req).status, '404 Not Found')
+
+        # if no account, return 401
+        req = Request.blank('http://127.0.0.1:8080/v1.0')
+        self.assertEqual(self.kauth.authorize(req).status, '401 Unauthorized')
+
+        # admin
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test')
+        req.method = 'GET'
+        req.remote_user = 'test:tester,test,AUTH_test'
+        self.assertEqual(self.kauth.authorize(req), None)
+
+        # acl include .rlisting, it can GET container
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST01')
+        req.acl = '.r:*,.rlistings'
+        req.remote_user = 'test:tester,test,'
+        self.assertEqual(self.kauth.authorize(req), None)
+
+        # acl, it can GET obj
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST01/test01.txt')
+        req.acl = '.r:*'
+        req.remote_user = 'test:tester,test,'
+        self.assertEqual(self.kauth.authorize(req), None)
+
+        # acl with .rlisting, it can't GET container
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST01')
+        req.acl = '.r:*'
+        req.remote_user = 'test:tester,test,'
+        self.assertEqual(self.kauth.authorize(req).status, '403 Forbidden')
+
+        # if no REMOTE_USER, return 401
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST01/test01.txt')
+        req.acl = 'test'
+        self.assertEqual(self.kauth.authorize(req).status, '401 Unauthorized')
+
+        # acl include currect account, OK
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST01')
+        req.acl = 'test'
+        req.remote_user = 'test:tester,test,'
+        self.assertEqual(self.kauth.authorize(req), None)
+
+        # acl include wrong account, NG
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST01')
+        req.acl = 'test2'
+        req.remote_user = 'test:tester,test,'
+        self.assertEqual(self.kauth.authorize(req).status, '403 Forbidden')
+
+        # acl include correct account and user, OK
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST01')
+        req.acl = 'test:tester'
+        req.remote_user = 'test:tester,test,'
+        self.assertEqual(self.kauth.authorize(req), None)
+
+        # acl include wrong user, NG
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST01')
+        req.acl = 'test:tester2'
+        req.remote_user = 'test:tester,test,'
+        self.assertEqual(self.kauth.authorize(req).status, '403 Forbidden')
+
+        # acl include correct one in accounts, OK
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST01')
+        req.acl = 'test,test2'
+        req.remote_user = 'test:tester,test,'
+        self.assertEqual(self.kauth.authorize(req), None)
+
+        # acl include correct one in users, OK
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST01')
+        req.acl = 'test2:tester2,test:tester'
+        req.remote_user = 'test:tester,test,'
+        self.assertEqual(self.kauth.authorize(req), None)
+
+        # acl include correct one in accounts, users, OK
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST01')
+        req.acl = 'test2,test:tester'
+        req.remote_user = 'test:tester,test,'
+        self.assertEqual(self.kauth.authorize(req), None)
+
+        # if req has no acl attribute, NG
+        req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test/TEST01')
+        req.remote_user = 'test:tester,test,'
+        self.assertEqual(self.kauth.authorize(req).status, '403 Forbidden')
+
+
     def test_denied_response(self):
         req = Request.blank('http://127.0.0.1:8080/v1.0/AUTH_test')
         req.remote_user='test:tester,test,'
@@ -313,6 +447,13 @@ class TestController(unittest.TestCase):
                          {'storage': 
                           {'default': 'locals', 
                            'locals': 'http://172.30.112.168:8080/v1.0/AUTH_test'}})
+        resp = Request.blank('/auth/v1.0',
+                             headers={'X-Auth-User': 'test:tester',
+                                      'X-Auth-Key': 'dummy'}).get_response(kauth)
+        self.assertEqual(resp.status, '401 Unauthorized')
+        resp = Request.blank('/auth/v1.0',
+                             headers={}).get_response(kauth)
+        self.assertEqual(resp.status, '401 Unauthorized')
 
     #@unittest.skip
     def test_connect_swift(self):
@@ -328,6 +469,12 @@ class TestController(unittest.TestCase):
         self.assertEqual(resp.status, '200 OK')
         self.assertEqual(app.env['PATH_INFO'], '/v1.0/AUTH_test')
         self.assertEqual(app.env['REMOTE_USER'], 'admin:admin,admin,')
+
+        resp = Request.blank('/v1.0/AUTH_test',
+                             headers={'X-Auth-Token': 'XXXXXXXXXXXX'},
+                             environ={'swift.cache': FakeMemcache()}).get_response(kauth)
+        self.assertEqual(resp.status, '401 Unauthorized')
+
 
 
 # test data
