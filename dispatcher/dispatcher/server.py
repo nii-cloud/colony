@@ -212,7 +212,9 @@ class Dispatcher(object):
         start_response(resp.status, resp.headerlist)
         if req.method in ('PUT', 'POST'):
             return resp.body
-        return resp.app_iter if resp.app_iter is not None else resp.body
+        return resp.app_iter \
+            if resp.app_iter is not None \
+            else resp.body
 
 
     def dispatch_in_normal(self, req, location):
@@ -748,8 +750,6 @@ class Dispatcher(object):
                     e['name'] = prefix + self.combinater_char + e['name']
                     merge_body.append(e)
             return json.dumps(merge_body)
-        elif content_type.startswith('application/xml'):
-            pass
         else:
             pass
 

@@ -101,13 +101,18 @@ class DummySrv(object):
                 status = '200 OK'
             elif req.path == '/auth/v1.0':
                 headers = []
-                auth_res = {'storage': {'default': 'locals', 'locals': '%s/v1.0/AUTH_test' % self.base_url}}
-                body = json.dumps(auth_res)
-                headers.append(('X-Storage-Url', '%s/v1.0/AUTH_test' % self.base_url))
-                headers.append(('X-Auth-Token', 'dummy'))
-                headers.append(('X-Storage-Token', 'dummy'))
-                headers.append(('Content-Type', 'application/json'))
-                status = '200 OK'
+                if req.headers['x-auth-key'] == 'testing':
+                    auth_res = {'storage': {'default': 'locals', 'locals': '%s/v1.0/AUTH_test' % self.base_url}}
+                    body = json.dumps(auth_res)
+                    headers.append(('X-Storage-Url', '%s/v1.0/AUTH_test' % self.base_url))
+                    headers.append(('X-Auth-Token', 'dummy'))
+                    headers.append(('X-Storage-Token', 'dummy'))
+                    headers.append(('Content-Type', 'application/json'))
+                    status = '200 OK'
+                else:
+                    status = '401 Unauthorized'
+                    headers.append(('Content-Type', 'text/plain'))
+                    body = ''
             else:
                 start_response('404 Not Found', [('content-type','text/plain')])
                 return ''
@@ -286,6 +291,11 @@ class TestController(unittest.TestCase):
         self.assertEqual(res.headers['x-storage-token'], 'dummy__@@__dummy')
         self.assertEqual(body, json.loads(res.body))
 
+        res = self.app.get('/both/auth/v1.0', 
+                           headers={'X-Auth-User': 'test:tester', 
+                                    'X-Auth-Key': 'dummy'}, expect_errors=True)
+        self.assertEqual(res.status, '401 Unauthorized')
+
     # request relay in merge mode
     #@unittest.skip
     def test_13_REQUEST_merge_GET_account(self):
@@ -392,3 +402,14 @@ class TestController(unittest.TestCase):
         print res.body
         self.assertEqual(body, res.body)
 
+    def test_get_merged_auth_resp(self):
+        req = Request.blank('/auth/v1.0')
+        req.headers['x-auth-user'] = 'test:tester'
+        req.headers['x-auth-key'] = 'testing'
+        location = 'both'
+        self.assertEqual(self.app.app.get_merged_auth_resp(req, location).status, '200 OK')
+        req = Request.blank('/auth/v1.0')
+        req.headers['x-auth-user'] = 'test:tester'
+        req.headers['x-auth-key'] = 'dummy'
+        location = 'both'
+        self.assertEqual(self.app.app.get_merged_auth_resp(req, location).status, '401 Unauthorized')
