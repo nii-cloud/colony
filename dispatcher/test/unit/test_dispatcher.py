@@ -436,3 +436,19 @@ class TestController(unittest.TestCase):
         self.assertEqual(res.status, '404 Not Found')
         res = self.app.get('/nothing/v1.0/AUTH_test', headers=dict(X_Auth_Token='t__@@__v'), expect_errors=True)
         self.assertEqual(res.status, '404 Not Found')
+
+
+    def test_put_container(self):
+        req = Request.blank('/')
+        location = 'both'
+        cont_prefix = 'hoge'
+        each_tokens = ['t', 'v']
+        account = 'AUTH_test'
+        container = 'TEST0'
+        res = self.app.app._create_container(req, location, 
+                                             cont_prefix, each_tokens,
+                                             account, container)
+        self.assertEqual(proxy0_srv.env['PATH_INFO'], '/v1.0/AUTH_test/TEST0')
+        self.assertEqual(proxy0_srv.env['SERVER_NAME'], '127.0.0.1')
+        self.assertEqual(proxy0_srv.env['SERVER_PORT'], '8080')
+        self.assertEqual(proxy0_srv.env['REQUEST_METHOD'], 'PUT')

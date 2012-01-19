@@ -455,6 +455,12 @@ class Dispatcher(object):
         max_segment = obj_size / self.swift_store_large_chunk_size + 1
         cur = str(time.time())
         body = StringIO(from_resp.body)
+        seg_cont = '%s_segments' % container
+        cont_resp = self._create_container(to_req, location, 
+                                           cont_prefix, each_tokens, 
+                                           from_real_path_ls[1], seg_cont)
+        if cont_resp.status_int != 201 and put_cont_resp.status_int != 202:
+            return cont_resp
         for seg in range(max_segment):
             """ 
             <name>/<timestamp>/<size>/<segment> 
@@ -465,7 +471,7 @@ class Dispatcher(object):
             chunk = body.read(self.swift_store_large_chunk_size)
             to_resp = self._create_put_req(to_req, location, 
                                            cont_prefix, each_tokens, 
-                                           from_real_path_ls[1], container, 
+                                           from_real_path_ls[1], seg_cont, 
                                            split_obj_name, None,
                                            chunk,
                                            len(chunk))
@@ -474,7 +480,7 @@ class Dispatcher(object):
                 return self.check_error_resp([to_resp])
         # upload object manifest
         body.close() 
-        to_req.headers['x-object-manifest'] = '%s/%s/%s/%s/' % (container, obj, cur, obj_size)
+        to_req.headers['x-object-manifest'] = '%s/%s/%s/%s/' % (seg_cont, obj, cur, obj_size)
         return self._create_put_req(to_req, location, 
                                     cont_prefix, each_tokens, 
                                     from_real_path_ls[1], container, obj, query,
@@ -662,6 +668,24 @@ class Dispatcher(object):
                urlencode(query, True) if query else None,
                parsed.fragment)
         return urlunparse(url)
+
+
+    def _create_container(self, to_req, location, prefix, each_tokens, 
+                              account, cont):
+        """ """
+        to_swift_svrs = self.loc.servers_by_container_prefix_of(location, prefix)
+        to_token = each_tokens[self._get_servers_subscript_by_prefix(location, prefix)]
+        to_real_path = '/%s/%s/%s' % (self.req_version_str, account, cont)
+        to_real_path_ls = to_real_path.split('/')[1:]
+        to_url = self._combinate_url(to_req, to_swift_svrs[0], to_real_path, None)
+        to_req.headers['x-auth-token'] = to_token
+        to_req.method = 'PUT'
+        to_resp = self.relay_req(to_req, to_url,
+                                 to_real_path_ls,
+                                 to_swift_svrs,
+                                 self.loc.webcache_of(location))
+        return to_resp
+
 
     def _create_put_req(self, to_req, location, prefix, each_tokens, 
                        account, cont, obj, query, body, to_size):
