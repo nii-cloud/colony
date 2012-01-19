@@ -201,7 +201,6 @@ class AuthProtocol(object):
         conn = connect('%s' % self.auth_netloc, timeout=10)
         conn.request('POST', '/v2.0/tokens', json.dumps(auth_req), req_headers)
         resp = conn.getresponse()
-        #print resp.status
         if resp.status != 200:
             return None
         data = resp.read()
@@ -224,10 +223,6 @@ class AuthProtocol(object):
         """
         add by colony.
         """
-        # memcache_client = cache_from_env(env)
-        # if memcache_client:
-        #     cached_auth_data = memcache_client.get(memcache_key)
-
         if not auth_resp.has_key('access'):
             return None
         auth_token = auth_resp['access']['token']['id']
