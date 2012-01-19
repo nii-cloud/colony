@@ -147,6 +147,11 @@ class TestController(unittest.TestCase):
         """ location str parse and construct server info from server.txt"""
         loc_str = ':test/server0.txt, local:test/server1.txt, both:(hoge)test/server2.txt (gere)test/server3.txt, remote:test/server4.txt'
         loc = Location(loc_str)
+        self.assertTrue(loc.has_location(''))
+        self.assertTrue(loc.has_location('local'))
+        self.assertTrue(loc.has_location('remote'))
+        self.assertTrue(loc.has_location('both'))
+        self.assertFalse(loc.has_location('nothing'))
         self.assertEqual({'webcache': {'http://127.0.0.1:8080': 'http://127.0.0.1:8888'}, 
                           'container_prefix': {'http://127.0.0.1:8080': None}, 
                           'swift': [['http://127.0.0.1:8080']]}, 
@@ -167,10 +172,11 @@ class TestController(unittest.TestCase):
         self.assertEqual([['http://127.0.0.1:8080']], loc.swift_of('local'))
         self.assertEqual([['http://127.0.0.1:8080'], ['http://127.0.0.1:18080']], loc.swift_of('both'))
         self.assertEqual([['http://127.0.0.1:18080']], loc.swift_of('remote'))
-        self.assertEqual(False, loc.is_merged(''))
-        self.assertEqual(False, loc.is_merged('local'))
-        self.assertEqual(True, loc.is_merged('both'))
-        self.assertEqual(False, loc.is_merged('remote'))
+        self.assertFalse(loc.is_merged(''))
+        self.assertFalse(loc.is_merged('local'))
+        self.assertTrue(loc.is_merged('both'))
+        self.assertFalse(loc.is_merged('remote'))
+        self.assertEqual(loc.is_merged('nothing') ,None)
         self.assertEqual(None, loc.container_prefix_of('', 'http://127.0.0.1:8080'))
         self.assertEqual('hoge', loc.container_prefix_of('both', 'http://127.0.0.1:8080'))
         self.assertEqual('gere', loc.container_prefix_of('both', 'http://127.0.0.1:18080'))
@@ -210,6 +216,13 @@ class TestController(unittest.TestCase):
     def test_LOCATION_invalid_location_file(self):
         loc_str = ':test/server00.txt'
         self.assertRaises(ValueError, Location, loc_str)
+
+    def test_LOCATION_invalid_location_str(self):
+        loc_str = 'test/server0.txt'
+        self.assertRaises(ValueError, Location, loc_str)
+        loc_str = None
+        self.assertRaises(ValueError, Location, loc_str)
+
 
     # rewrite url
     def test_03_REWRITE_PATH_blank(self):
@@ -413,3 +426,13 @@ class TestController(unittest.TestCase):
         req.headers['x-auth-key'] = 'dummy'
         location = 'both'
         self.assertEqual(self.app.app.get_merged_auth_resp(req, location).status, '401 Unauthorized')
+
+
+    def test_no_exist_location(self):
+        res = self.app.get('/nothing/v1.0/auth', 
+                           headers={'X-Auth-User': 'test:tester', 
+                                    'X-Auth-Key': 'testing'},
+                           expect_errors=True)
+        self.assertEqual(res.status, '404 Not Found')
+        res = self.app.get('/nothing/v1.0/AUTH_test', headers=dict(X_Auth_Token='t__@@__v'), expect_errors=True)
+        self.assertEqual(res.status, '404 Not Found')

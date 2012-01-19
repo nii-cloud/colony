@@ -202,6 +202,10 @@ class Dispatcher(object):
         if self.loc.age == 0:
             self.logger.warn('dispatcher relay rule is invalid, using old rules now.')
         loc_prefix = self.location_check(req)
+        if not self.loc.has_location(loc_prefix):
+            resp = HTTPNotFound(request=req)
+            start_response(resp.status, resp.headerlist)
+            return resp.body
         if self.loc.is_merged(loc_prefix):
             self.logger.debug('enter merge mode')
             resp = self.dispatch_in_merge(req, loc_prefix)

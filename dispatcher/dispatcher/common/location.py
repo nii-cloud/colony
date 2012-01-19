@@ -39,6 +39,12 @@ class Location(object):
         except Exception, err:
             print 'Error: %s go on using old location settings.' % err
 
+    def has_location(self, location_str):
+        if location_str:
+            return self.locations.has_key(location_str)
+        else:
+            return self.locations.has_key('')
+
     def servers_of(self, location_str):
         if location_str:
             try:
