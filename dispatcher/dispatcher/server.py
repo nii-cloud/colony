@@ -78,12 +78,10 @@ class RelayRequest(object):
                     self.logger.debug('Trying to write to %s' % path)
             conn.queue.task_done()
 
-
     def __call__(self):
         """
         :return httplib.HTTP(S)Connection in success, and webob.exc.HTTPException in failure
         """
-
         if self.headers.has_key('content-length'):
             if int(self.headers['content-length']) >= MAX_FILE_SIZE:
                 return HTTPRequestEntityTooLarge(request=self.req)
@@ -171,7 +169,6 @@ class RelayRequest(object):
                 self.logger.debug("get response of GET or misc Error: %s" % err)
                 return HTTPGatewayTimeout(request=self.req)
 
-
 class Dispatcher(object):
     """ """
     def __init__(self, conf):
@@ -219,7 +216,6 @@ class Dispatcher(object):
         return resp.app_iter \
             if resp.app_iter is not None \
             else resp.body
-
 
     def dispatch_in_normal(self, req, location):
         """ request dispatcher in normal mode """
@@ -276,9 +272,7 @@ class Dispatcher(object):
             return self.get_merged_containers_resp(req, location)
         return HTTPNotFound(request=req)
 
-
     # return Response object
-
     def get_merged_auth_resp(self, req, location):
         """ """
         resps = []
@@ -487,9 +481,7 @@ class Dispatcher(object):
                                     '',
                                     0)
 
-
     # utils
-
     def check_error_resp(self, resps):
         status_ls = [r.status_int for r in resps]
         if [s for s in status_ls if not str(s).startswith('20')]:
@@ -513,7 +505,6 @@ class Dispatcher(object):
         else:
             path = req.path.split('/')[1:]
         return [p for p in path if p]
-
 
     def _auth_check(self, req):
         if 'x-auth-token' in req.headers or 'x-storage-token' in req.headers:
@@ -551,7 +542,6 @@ class Dispatcher(object):
         cont_prefix = self._get_container_prefix(cont)
         real_cont = cont.split(cont_prefix + ':')[1] if cont_prefix else cont
         return cont_prefix, real_cont, obj
-
 
     def _merge_headers(self, resps, location):
         """ """
@@ -642,7 +632,6 @@ class Dispatcher(object):
             return None
         return auth_token.split(self.merged_combinator_str)
 
-
     def _get_servers_subscript_by_prefix(self, location, prefix):
         swift_svrs = self.loc.servers_by_container_prefix_of(location, prefix)
         i = 0
@@ -657,7 +646,6 @@ class Dispatcher(object):
             i += 1
         return i
 
-
     def _combinate_url(self, req, swift_svr, real_path, query):
         parsed = urlparse(req.url)
         choiced = urlparse(swift_svr)
@@ -668,7 +656,6 @@ class Dispatcher(object):
                urlencode(query, True) if query else None,
                parsed.fragment)
         return urlunparse(url)
-
 
     def _create_container(self, to_req, location, prefix, each_tokens, 
                               account, cont):
@@ -685,7 +672,6 @@ class Dispatcher(object):
                                  to_swift_svrs,
                                  self.loc.webcache_of(location))
         return to_resp
-
 
     def _create_put_req(self, to_req, location, prefix, each_tokens, 
                        account, cont, obj, query, body, to_size):
@@ -781,9 +767,7 @@ class Dispatcher(object):
         else:
             pass
 
-
     # relay request
-
     def relay_req(self, req, req_url, path_str_ls, relay_servers, webcaches):
         """ """
         # util

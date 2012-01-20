@@ -83,6 +83,8 @@ class DummySrv(object):
         self.env = env
         req = Request(env)
         if req.path == '/v2.0/tokens' and req.method == 'POST':
+            # req_body = json.loads(req.body)
+            # if req_body['auth']['passwordCredentials']['username'] == 'dummy':
             body = json.dumps(self.body)
             status = '200 OK'
         else:
@@ -135,6 +137,8 @@ class TestController(unittest.TestCase):
                          {'storage': 
                           {'default': 'locals', 
                            'locals': 'http://172.30.112.168:8080/v1.0/AUTH_test'}})
+        auth_user = ('dummy', 'dummy', 'dummy')
+        self.assertEqual(kauth._validate_claims_each_user(auth_user), None)
 
     #@unittest.skip
     def test_authreq_to_keystone(self):
@@ -165,6 +169,7 @@ class TestController(unittest.TestCase):
                           'tester', 
                           ['Member'], 
                           'http://172.30.112.168:8080/v1.0/AUTH_test'))
+        self.assertEqual(self.kauth._get_swift_info({'dummy': {}}, 'RegionOne'), None)
 
     #@unittest.skip
     def test_accession_by_auth_token(self):
