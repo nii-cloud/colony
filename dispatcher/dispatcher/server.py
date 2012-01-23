@@ -123,8 +123,12 @@ class RelayRequest(object):
                                 if chunked:
                                     conn.queue.put('0\r\n\r\n')
                                 break
+                            except TypeError, err:
+                                self.logger.info('Chunk Read Error: %s' % err)
+                                break
                             except Exception, err:
-                                self.logger.debug('Chunk Read Error: %s' % err)
+                                self.logger.info('Chunk Read Error: %s' % err)
+                                return HTTPServerError(request=self.req)
                         bytes_transferred += len(chunk)
                         if bytes_transferred > MAX_FILE_SIZE:
                             return HTTPRequestEntityTooLarge(request=self.req)
@@ -146,17 +150,17 @@ class RelayRequest(object):
                         try:
                             resp = conn.getresponse()
                         except Exception, err:
-                            self.logger.debug('get response of PUT Error: %s' % err)
+                            self.logger.info('get response of PUT Error: %s' % err)
                         if isinstance(resp, BufferedHTTPResponse):
                             break
                         else:
                             sleep(0.1)
                 return resp
             except ChunkReadTimeout, err:
-                self.logger.debug("ChunkReadTimeout: %s" % err)
+                self.logger.info("ChunkReadTimeout: %s" % err)
                 return HTTPRequestTimeout(request=self.req)
             except (Exception, TimeoutError), err:
-                self.logger.debug("Error: %s" % err)
+                self.logger.info("Error: %s" % err)
                 return HTTPGatewayTimeout(request=self.req)
         else:
             try:
