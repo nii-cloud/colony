@@ -247,10 +247,12 @@ class UserAPI(BaseUserAPI):
                          order_by(user.id).\
                          limit(limit).\
                          all()
-        user_ids = set([str(assoc.user_id) for assoc in rv])
+        '''
+        user_ids = set([str(assoc.user_id) for assoc in users])
         users = session.query(models.User).\
                       filter("id in ('%s')" % "','".join(user_ids)).\
                       all()
+        '''
         for usr in users:
             usr.tenant_roles = set()
             for role in usr.roles:

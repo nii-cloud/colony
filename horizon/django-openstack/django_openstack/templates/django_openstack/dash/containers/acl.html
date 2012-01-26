@@ -27,8 +27,8 @@
     <tr class="{%cycle 'odd' 'even' %}">
     <td><div class='ui-icon ui-icon-person'></div>{{ acl }}</td>
     <td id="actions" align="right" width="100px">
-      <div class="fuga">
-      <button style="font-size:10px">Remove</button>
+      <div class="form" style="margin: 0" width="100px">
+      {% include 'django_openstack/dash/containers/_acl_remove.html' with form=remove_form greetings="HI" %}
       </div>
     </td>
     </tr>
@@ -88,9 +88,9 @@
      <h4>ACL Type:</h4>
        <tr><td>
      <div id="radio">
-       <input type="radio" name="readacl" id="readacl" />
+       <input type="radio" name="acltype" id="readacl" />
        <label for="readacl">Read ACL</label>
-       <input type="radio" name="writeacl" id="writeacl" />
+       <input type="radio" name="acltype" id="writeacl" />
        <label for="writeacl">Write ACL</label>
      </div></td>
        </tr>
@@ -112,7 +112,7 @@
            primary: "ui-icon-circle-close" }});
         $("#radio").buttonset( {
         icons: {
-           primary: "ui-icon-circle-close"
+           primary: "ui-icon-circle-close",
            secondary: "ui-icon-circle-close" }
         });
     })

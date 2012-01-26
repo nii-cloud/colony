@@ -52,7 +52,7 @@ class KeystoneMerge(object):
         if not self.is_keystone_req(req):
             self.logger.info('pass through')
             return self.app(env, start_response)
-        if self.is_keystone_auth_token_req(req, self.keystone_relay_token_paths):
+        if self.is_keystone_auth_token_req(req):
             self.logger.info('return auth response that merged one and other')
             mbody, mheaders = self.relay_keystone_auth_req(req, real_path)             
             if mbody:
@@ -79,12 +79,12 @@ class KeystoneMerge(object):
             return True
         return False
 
-    def is_keystone_auth_token_req(self, req, paths):
+    def is_keystone_auth_token_req(self, req):
         """ 
         check path is controled by keystone_merge. 
         ex: '/v2.0/tokens'
         """
-        for path in paths:
+        for path in self.keystone_relay_token_paths:
             if req.path == path and req.method == 'POST' \
                     and req.content_type == 'application/json':
                 return True
@@ -215,12 +215,16 @@ class KeystoneMerge(object):
         return mheaders
 
     def _split_netloc(self, parsed_url):
-        host, port = parsed_url.netloc.split(':')
+        if parsed_url.netloc.find(':') > 0:
+            host, port = parsed_url.netloc.split(':')
+        else:
+            host = parsed_url.netloc
+            port = None
         if not port:
             if parsed_url.scheme == 'http':
-                port = 80
+                port = '80'
             elif parsed_url.scheme == 'https':
-                port = 443
+                port = '443'
             else:
                 return None, None
         return host, port

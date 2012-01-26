@@ -33,6 +33,10 @@ shouldn't need to understand the finer details of APIs for Nova/Glance/Swift et
 al.
 """
 
+import time
+
+from urllib import quote
+
 from django.conf import settings
 from django.contrib import messages
 
@@ -316,7 +320,7 @@ def get_endpoint_index_by_region(request, service):
     region = None
     try:
         region = request.session['region']
-    except KeyError:
+    except (KeyError, AttributeError):
         pass
     if not region:
         return 0
@@ -332,7 +336,8 @@ def url_for(request, service_type, admin=False):
     if service:
         i = get_endpoint_index_by_region(request, service)
         try:
-            request.session['region'] = service['endpoints'][i]['region']
+            if getattr(request, 'session', None) and request.session.has_key('region'):
+                request.session['region'] = service['endpoints'][i]['region']
             if admin:
                 return service['endpoints'][i]['adminURL']
             else:
@@ -901,6 +906,27 @@ def swift_upload_object(request, container_name, object_name, object_data):
     container = swift_api(request).get_container(container_name)
     obj = container.create_object(object_name)
     obj.write(object_data)
+
+def swift_upload_object_with_manifest(request, container_name, object_name, object_data):
+
+    if object_data.size < settings.SWIFT_LARGE_OBJECT_SIZE:
+        return swift_upload_object(request, container_name, object_name, object_data.read())
+
+    seq_cont = container_name + '_segments'
+    c = swift_api(request).create_container(seq_cont)
+    container = swift_api(request).get_container(container_name)
+    seq = 0
+    file_time = time.time()
+    for buf in object_data.chunks(settings.SWIFT_LARGE_OBJECT_CHUNK_SIZE):
+        path = '%s/%s/%s/%08d' % (object_name, file_time, object_data.size, seq)
+        path = quote(path, '')
+        obj = c.create_object(path)
+        obj.write(buf)
+        ++seq
+    manifest_obj = container.create_object(object_name)
+    objpath= '%s/%s/%s' % (object_name, file_time, object_data.size)
+    manifest_obj.manifest = '%s/%s' % (seq_cont, quote(objpath, ''))
+    manifest_obj.sync_manifest()
 
 
 def swift_delete_object(request, container_name, object_name):

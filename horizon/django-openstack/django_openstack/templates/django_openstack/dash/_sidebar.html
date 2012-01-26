@@ -1,6 +1,7 @@
 {% load sidebar_modules %}
 
 <div id='sidebar'>
+  {% if compute_configured or quantum_configured %}
   <h3>Manage Compute</h3>
   <ul class='sub_nav'>
     {% if compute_configured %}
@@ -16,6 +17,7 @@
       <li><a {% if current_sidebar == "networks" %} class="active" {% endif %} href="{% url dash_networks request.user.tenant_id %}">Networks</a></li>
     {% endif %}
   </ul>
+  {% endif %}
   {% if swift_configured %}
   <h3>Manage Object Store</h3>
   <ul class='sub_nav'>

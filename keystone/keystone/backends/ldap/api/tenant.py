@@ -35,25 +35,7 @@ class TenantAPI(BaseLdapAPI, BaseTenantAPI):
 
         id_list.sort()
         id_max = id_list[-1]
-
-        if id_max == id_list.index(id_max):
-            values['id'] = str(id_max + 1)
-        else:
-            id_data = id_tmp = id_max / 2
-            while True:
-                id_tmp = id_tmp / 2
-                if id_tmp == 0:
-                    id_tmp = 1
-                if id_list.count(id_data) == 0:
-                    values['id'] = str(id_data)
-                    break
-                else:
-                    if id_data == id_list.index(id_data):
-                        id_data += id_tmp
-                    else:
-                        id_data -= id_tmp
-
-        return super(TenantAPI, self).create(values)
+        values['id'] = str(id_max + 1)
 
     def get_user_tenants(self, user_id, include_roles=True):
         user_dn = self.api.user._id_to_dn(user_id)
