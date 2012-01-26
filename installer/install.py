@@ -6,6 +6,10 @@ import sys
 import yaml
 from parse_erb import dump_config
 
+def die(message, *args):
+    print >> sys.stderr, message % args
+    sys.exit(1)
+
 def run_command(cmd, redirect_output=True, check_exit_code=True):
     """
     Runs a command in an out-of-process shell, returning the
@@ -16,7 +20,7 @@ def run_command(cmd, redirect_output=True, check_exit_code=True):
     else:
         stdout = None
 
-    proc = subprocess.Popen(cmd, cwd=ROOT, stdout=stdout)
+    proc = subprocess.Popen(cmd, cwd=os.path.curdir, stdout=stdout)
     output = proc.communicate()[0]
     if check_exit_code and proc.returncode != 0:
         die('Command "%s" failed.\n%s', ' '.join(cmd), output)
@@ -123,10 +127,17 @@ class Config(object):
 class ConfigManager(object):
 
     templates = 'templates'
+    scripts = 'scripts'
 
     def _get_templates_path(self, name, path):
         filename = os.path.basename(path)
         return '%s/softwares/%s/%s/%s.erb' % ( os.path.curdir, name, ConfigManager.templates, filename)
+
+    def _get_install_scripts(self, name, component_name, install=True):
+        if install:
+            return '%s/softwares/%s/%s/install-%s.sh' % ( os.path.curdir, name, ConfigManager.scripts, component_name)
+        else:
+            return '%s/softwares/%s/%s/uninstall-%s.sh' % ( os.path.curdir, name, ConfigManager.scripts, component_name)
 
     def __init__(self):
         files = glob.glob('./softwares/*/data.yml')
@@ -137,17 +148,25 @@ class ConfigManager(object):
             c.load()
             self._softwares[name] = c
 
-    def _ask(self, name):
-        v = raw_input('installing :%s y/N ?' % name)
+    def _ask(self, name, install=True):
+        if install:
+            v = raw_input('installing :%s y/N ?' % name)
+        else:
+            v = raw_input('Uninstalling :%s y/N ?' % name)
         if v in ['Y', 'y']:
             return True
         return False
         
-    def ask(self):
+    def ask(self, install=True):
         for name, value in self._softwares.iteritems():
             if self._ask(name):
-                value.ask()
+                if install:
+                    value.ask()
                 for comp_name, comp_configs in value.components.iteritems():
+                    scripts = self._get_install_scripts(name, comp_name, install)
+                    if os.path.exists(scripts):
+                        if not run_command(scripts, redirect_output=False):
+                            print "installing failure"
                     for comp_config in comp_configs:
                         if comp_config.install:
                             template_path = self._get_templates_path(name, comp_config.default_value)
