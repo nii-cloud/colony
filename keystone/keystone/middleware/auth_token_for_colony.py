@@ -128,10 +128,17 @@ class AuthProtocol(object):
             start_response(resp.status, resp.headerlist)
             return resp.body
 
+        env['swift.authorize'] = self.authorize_colony
+        env['swift.clean_acl'] = clean_acl
+
         #Look for authentication claims
         claims = self._get_claims(env)
         if not claims:
-            return self._reject_request(env, start_response)
+            # check acl by referer with no auth
+            if len(env['PATH_INFO'].split('/')) >= 4 and \
+                    env['REQUEST_METHOD'] == 'GET':
+                return self.app(env, start_response)
+            return self._reject_request(env, start_response)                
 
         # check auth token with no admin privilege. add by colony
         result = self._accession_by_auth_token(env, claims)
@@ -149,8 +156,6 @@ class AuthProtocol(object):
             (tenant, username, tenant, '')
             # (tenant, username, tenant, \
             #      'AUTH_%s' % tenant if self.admin_role in roles else '')
-        env['swift.authorize'] = self.authorize_colony
-        env['swift.clean_acl'] = clean_acl
         return self.app(env, start_response)
 
 
@@ -331,7 +336,6 @@ class AuthProtocol(object):
                 if obj or '.rlistings' in groups:
                     self.logger.info('referer_allowed')
                     return None
-                return self.denied_response(req)
             if not req.remote_user:
                 return self.denied_response(req)
             for user_group in user_groups:
