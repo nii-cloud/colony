@@ -52,14 +52,14 @@ class ConfigItem(object):
 
     def ask(self):
         try:
-            v = raw_input('%s : [default:%s]' % (self._name, self._default_value))
+            v = raw_input('%s : [%s]' % (self._name, self._value if self._value else self._default_value))
             if not v:
                 v = self._default_value
         except EOFError:
             print ""
             v = self._default_value
-        # validator
         self._value = v
+        # validator
         self._install = True
 
     def to_dict(self):
@@ -121,14 +121,36 @@ class Config(object):
 
         return False
 
+    def _ask_item(self):
+        conflen = len(self._configs)
+        try:
+            v = raw_input('Choose Item number: ')
+            item = int(v)
+            if item == conflen + 1:
+                return False
+            if item >= 0 and item <= conflen:
+                self._configs[item].ask()
+        except (EOFError, ValueError):
+            print ""
+        return True
+
+    def _menu(self):
+        for x in range(len(self._configs)):
+            c = self._configs[x]
+            print "%d: %s [%s]" % (x, c.name, c.value if c.value else c.default_value)
+        # put last value
+        print "%d: Quit" % (len(self._configs) + 1)
+  
     def ask(self):
         for comp_name, components_configs in self.components.iteritems():
             # check install components
             if self._ask(comp_name):
                 for config in components_configs:
                     config.ask()
-        for config in self._configs:
-            config.ask()
+        while True:
+            self._menu()
+            if not self._ask_item():
+                break
 
 
 
@@ -191,5 +213,6 @@ try:
 except KeyboardInterrupt:
     print "install intruppted\n"
 except Exception as e:
+    print e
     raise e
 
