@@ -18,7 +18,7 @@ def run_command(cmd, redirect_output=True, check_exit_code=True):
     if redirect_output:
         stdout = subprocess.PIPE
     else:
-        stdout = None
+        stdout = open("install.log", "a+")
 
     proc = subprocess.Popen(cmd, cwd=os.path.curdir, stdout=stdout)
     output = proc.communicate()[0]
@@ -51,9 +51,13 @@ class ConfigItem(object):
         return self._install
 
     def ask(self):
-        v = raw_input('%s : [default:%s]' % (self._name, self._default_value))
-        if not v:
-           v = self._default_value
+        try:
+            v = raw_input('%s : [default:%s]' % (self._name, self._default_value))
+            if not v:
+                v = self._default_value
+        except EOFError:
+            print ""
+            v = self._default_value
         # validator
         self._value = v
         self._install = True
@@ -108,9 +112,13 @@ class Config(object):
         self._load_components_config()
     
     def _ask(self, name):
-        v = raw_input('installing :%s y/N ?' % name)
-        if v in ['Y', 'y']:
-            return True
+        try:
+            v = raw_input('installing :%s y/N ?' % name)
+            if v in ['Y', 'y']:
+                return True
+        except EOFError:
+            print ""
+
         return False
 
     def ask(self):
@@ -149,12 +157,16 @@ class ConfigManager(object):
             self._softwares[name] = c
 
     def _ask(self, name, install=True):
-        if install:
-            v = raw_input('installing :%s y/N ?' % name)
-        else:
-            v = raw_input('Uninstalling :%s y/N ?' % name)
-        if v in ['Y', 'y']:
-            return True
+        try:
+             if install:
+                 v = raw_input('installing :%s y/N ?' % name)
+             else:
+                 v = raw_input('Uninstalling :%s y/N ?' % name)
+             if v in ['Y', 'y']:
+                 return True
+        except EORError:
+            print ''
+
         return False
         
     def ask(self, install=True):
@@ -173,8 +185,13 @@ class ConfigManager(object):
                             dump_config(value.config, template_path, comp_config.value)
 
 
-cm = ConfigManager()
-cm.ask()
+try:
+    cm = ConfigManager()
+    cm.ask()
+except KeyboardInterrupt:
+    print "install intruppted\n"
+except Exception as e:
+    raise e
 
 """
 for file in files:
