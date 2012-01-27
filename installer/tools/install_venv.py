@@ -82,7 +82,7 @@ def create_virtualenv(venv=VENV):
     virtual environment
     """
     print 'Creating venv...',
-    run_command(['virtualenv', '-q', '--no-site-packages', VENV])
+    run_command(['virtualenv', '-q', '--no-site-packages', venv])
     print 'done.'
     print 'Installing pip in virtualenv...',
     if not run_command(['tools/with_venv.sh', 'easy_install', 'pip']).strip():
@@ -132,9 +132,14 @@ def print_help():
 
 
 def main(argv):
+    env = None
+    if os.environ.get('COLONY_INSTALL_HOME', None):
+        env=os.environ['COLONY_INSTALL_HOME']
+    else:
+        env=VENV
     check_dependencies()
-    create_virtualenv()
-    install_dependencies()
+    create_virtualenv(env)
+    install_dependencies(env)
     print_help()
 
 if __name__ == '__main__':
