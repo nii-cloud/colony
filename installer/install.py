@@ -215,7 +215,11 @@ argparser.add_argument('--version', action='version', version='%(prog)s 1.0')
 argparser.add_argument('--components', action='append', dest='installs', default=[],
                        help='component name which to be installed')
 argparser.add_argument('--uninstall', action='store_false', default=True, dest='install')
+argparser.add_argument('--local', action='store_true', default=False, dest='local')
 args = argparser.parse_args()
+
+if args.local:
+   os.environ['PIP_FIND_LINKS'] = "file:///%s/downloads" % os.path.realpath(os.path.dirname(sys.argv[0]))
 
 try:
     cm = ConfigManager()
