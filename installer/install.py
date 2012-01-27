@@ -164,7 +164,7 @@ class ConfigManager(object):
                  v = raw_input('Uninstalling :%s y/N ?' % name)
              if v in ['Y', 'y']:
                  return True
-        except EORError:
+        except EOFError:
             print ''
 
         return False
@@ -193,10 +193,3 @@ except KeyboardInterrupt:
 except Exception as e:
     raise e
 
-"""
-for file in files:
-    c = Config(file)
-    c.load()
-    c.ask()
-    dump_config(c.config)
-"""
