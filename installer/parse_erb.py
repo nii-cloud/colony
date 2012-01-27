@@ -20,7 +20,7 @@ def dump_config(configs=None, template_path=None, path=None):
 
     val = ''
     for config in configs:
-        val += "%s='%s'\n" % (config.name, config.value)
+        val += "%s='%s'\n" % (config.name, config.value if config.value else config.default_value)
 
     ctx = get_ctx()
     erb = ctx('%sERB.new(File.read("%s")).result(binding)' % (val, template_path))
