@@ -1,15 +1,19 @@
 # NOTE: You may need to install additional binary packages prior to using 'pip install'
 #       See the Contributor Documentation for more information
 
-yamlconfig
-EmPy
-rython
-
 # Production
+netifaces
+eventlet
+pastedeploy
+swift
+
+
+# Development
+coverage # computes code coverage percentages
+
 # Testing
 unittest2 # backport of unittest lib in python 2.7
 webtest # test wsgi apps without starting an http server
 pylint # static code analysis
 pep8 # checks for PEP8 code style compliance
 mox # mock object framework
-argparse

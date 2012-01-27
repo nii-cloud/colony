@@ -1,4 +1,5 @@
 
+import argparse
 import glob
 import os
 import subprocess
@@ -126,7 +127,7 @@ class Config(object):
         try:
             v = raw_input('Choose Item number: ')
             item = int(v)
-            if item == conflen + 1:
+            if item == conflen:
                 return False
             if item >= 0 and item <= conflen:
                 self._configs[item].ask()
@@ -139,7 +140,7 @@ class Config(object):
             c = self._configs[x]
             print "%d: %s [%s]" % (x, c.name, c.value if c.value else c.default_value)
         # put last value
-        print "%d: Quit" % (len(self._configs) + 1)
+        print "%d: Quit" % (len(self._configs))
   
     def ask(self):
         for comp_name, components_configs in self.components.iteritems():
@@ -191,14 +192,15 @@ class ConfigManager(object):
 
         return False
         
-    def ask(self, install=True):
+    def ask(self, components, install=True):
         for name, value in self._softwares.iteritems():
-            if self._ask(name):
+            if self._ask(name, install):
                 if install:
                     value.ask()
                 for comp_name, comp_configs in value.components.iteritems():
                     scripts = self._get_install_scripts(name, comp_name, install)
                     if os.path.exists(scripts):
+                        print 'executing scripts %s' % scripts
                         if not run_command(scripts, redirect_output=False):
                             print "installing failure"
                     for comp_config in comp_configs:
@@ -207,9 +209,17 @@ class ConfigManager(object):
                             dump_config(value.config, template_path, comp_config.value)
 
 
+#parse arg
+argparser = argparse.ArgumentParser()
+argparser.add_argument('--version', action='version', version='%(prog)s 1.0')
+argparser.add_argument('--components', action='append', dest='installs', default=[],
+                       help='component name which to be installed')
+argparser.add_argument('--uninstall', action='store_false', default=True, dest='install')
+args = argparser.parse_args()
+
 try:
     cm = ConfigManager()
-    cm.ask()
+    cm.ask(args.installs, args.install)
 except KeyboardInterrupt:
     print "install intruppted\n"
 except Exception as e:
