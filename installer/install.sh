@@ -3,5 +3,8 @@
 
 rm -rf install.log
 
+echo "setting up installer"
 python tools/install_venv.py >>install.log
-bash tools/with_venv.sh python install.py
+echo "done"
+
+bash tools/with_venv.sh python install.py $@
