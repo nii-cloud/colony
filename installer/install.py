@@ -41,7 +41,7 @@ class ConfigItem(object):
 
     @property
     def value(self):
-        return self._value
+        return self._value if self._value else self._default_value
 
     @property
     def default_value(self):
@@ -53,7 +53,7 @@ class ConfigItem(object):
 
     def ask(self):
         try:
-            v = raw_input('%s : [%s]' % (self._name, self._value if self._value else self._default_value))
+            v = raw_input('%s : [%s]' % (self._name, self.value))
             if not v:
                 v = self._default_value
         except EOFError:
@@ -138,7 +138,7 @@ class Config(object):
     def _menu(self):
         for x in range(len(self._configs)):
             c = self._configs[x]
-            print "%d: %s [%s]" % (x, c.name, c.value if c.value else c.default_value)
+            print "%d: %s [%s]" % (x, c.name, c.value)
         # put last value
         print "%d: Quit" % (len(self._configs))
   
@@ -219,7 +219,7 @@ argparser.add_argument('--local', action='store_true', default=False, dest='loca
 args = argparser.parse_args()
 
 if args.local:
-   os.environ['PIP_FIND_LINKS'] = "file:///%s/downloads" % os.path.realpath(os.path.dirname(sys.argv[0]))
+   os.environ['PIP_FIND_LINKS'] = "file:///%s/cache" % os.path.realpath(os.path.dirname(sys.argv[0]))
 
 try:
     cm = ConfigManager()
