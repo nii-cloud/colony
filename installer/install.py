@@ -114,14 +114,14 @@ class Config(object):
         return False
 
     def ask(self):
-        for config in self._configs:
-            config.ask()
-
         for comp_name, components_configs in self.components.iteritems():
             # check install components
             if self._ask(comp_name):
                 for config in components_configs:
                     config.ask()
+        for config in self._configs:
+            config.ask()
+
 
 
 class ConfigManager(object):
