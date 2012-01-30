@@ -397,6 +397,7 @@ class ObjectController(Controller):
                 env['HTTP_ETAG'] = value.decode('base64').encode('hex')
             elif key == 'HTTP_X_AMZ_COPY_SOURCE':
                 env['HTTP_X_COPY_FROM'] = value
+                env['CONTENT_LENGTH'] = '0'
 
         body_iter = self.app(env, self.do_start_response)
         status = int(self.response_args[0].split()[0])

@@ -101,13 +101,18 @@ class DummySrv(object):
                 status = '200 OK'
             elif req.path == '/auth/v1.0':
                 headers = []
-                auth_res = {'storage': {'default': 'locals', 'locals': '%s/v1.0/AUTH_test' % self.base_url}}
-                body = json.dumps(auth_res)
-                headers.append(('X-Storage-Url', '%s/v1.0/AUTH_test' % self.base_url))
-                headers.append(('X-Auth-Token', 'dummy'))
-                headers.append(('X-Storage-Token', 'dummy'))
-                headers.append(('Content-Type', 'application/json'))
-                status = '200 OK'
+                if req.headers['x-auth-key'] == 'testing':
+                    auth_res = {'storage': {'default': 'locals', 'locals': '%s/v1.0/AUTH_test' % self.base_url}}
+                    body = json.dumps(auth_res)
+                    headers.append(('X-Storage-Url', '%s/v1.0/AUTH_test' % self.base_url))
+                    headers.append(('X-Auth-Token', 'dummy'))
+                    headers.append(('X-Storage-Token', 'dummy'))
+                    headers.append(('Content-Type', 'application/json'))
+                    status = '200 OK'
+                else:
+                    status = '401 Unauthorized'
+                    headers.append(('Content-Type', 'text/plain'))
+                    body = ''
             else:
                 start_response('404 Not Found', [('content-type','text/plain')])
                 return ''
@@ -142,6 +147,11 @@ class TestController(unittest.TestCase):
         """ location str parse and construct server info from server.txt"""
         loc_str = ':test/server0.txt, local:test/server1.txt, both:(hoge)test/server2.txt (gere)test/server3.txt, remote:test/server4.txt'
         loc = Location(loc_str)
+        self.assertTrue(loc.has_location(''))
+        self.assertTrue(loc.has_location('local'))
+        self.assertTrue(loc.has_location('remote'))
+        self.assertTrue(loc.has_location('both'))
+        self.assertFalse(loc.has_location('nothing'))
         self.assertEqual({'webcache': {'http://127.0.0.1:8080': 'http://127.0.0.1:8888'}, 
                           'container_prefix': {'http://127.0.0.1:8080': None}, 
                           'swift': [['http://127.0.0.1:8080']]}, 
@@ -162,10 +172,11 @@ class TestController(unittest.TestCase):
         self.assertEqual([['http://127.0.0.1:8080']], loc.swift_of('local'))
         self.assertEqual([['http://127.0.0.1:8080'], ['http://127.0.0.1:18080']], loc.swift_of('both'))
         self.assertEqual([['http://127.0.0.1:18080']], loc.swift_of('remote'))
-        self.assertEqual(False, loc.is_merged(''))
-        self.assertEqual(False, loc.is_merged('local'))
-        self.assertEqual(True, loc.is_merged('both'))
-        self.assertEqual(False, loc.is_merged('remote'))
+        self.assertFalse(loc.is_merged(''))
+        self.assertFalse(loc.is_merged('local'))
+        self.assertTrue(loc.is_merged('both'))
+        self.assertFalse(loc.is_merged('remote'))
+        self.assertEqual(loc.is_merged('nothing') ,None)
         self.assertEqual(None, loc.container_prefix_of('', 'http://127.0.0.1:8080'))
         self.assertEqual('hoge', loc.container_prefix_of('both', 'http://127.0.0.1:8080'))
         self.assertEqual('gere', loc.container_prefix_of('both', 'http://127.0.0.1:18080'))
@@ -183,6 +194,9 @@ class TestController(unittest.TestCase):
                          loc._sock_connect_faster(['http://127.0.0.1:8080', 
                                                    'http://127.0.0.1:18080', 
                                                    'http://127.0.0.1:9999'])[2])
+        loc_str = ':test/server0.txt test/server1.txt'
+        loc = Location(loc_str)
+        self.assertEqual(True, loc.is_merged(''))
     
     def test_02_LOCATION_update_location(self):
         """ server.txt reload if update."""
@@ -199,7 +213,17 @@ class TestController(unittest.TestCase):
         self.assertEqual([['http://192.168.2.1:8080']], 
                          loc.swift_of('remote'))
 
-        
+    def test_LOCATION_invalid_location_file(self):
+        loc_str = ':test/server00.txt'
+        self.assertRaises(ValueError, Location, loc_str)
+
+    def test_LOCATION_invalid_location_str(self):
+        loc_str = 'test/server0.txt'
+        self.assertRaises(ValueError, Location, loc_str)
+        loc_str = None
+        self.assertRaises(ValueError, Location, loc_str)
+
+
     # rewrite url
     def test_03_REWRITE_PATH_blank(self):
         """ rewrite path when location prefix is blank."""
@@ -279,6 +303,11 @@ class TestController(unittest.TestCase):
         self.assertEqual(res.headers['x-auth-token'], 'dummy__@@__dummy')
         self.assertEqual(res.headers['x-storage-token'], 'dummy__@@__dummy')
         self.assertEqual(body, json.loads(res.body))
+
+        res = self.app.get('/both/auth/v1.0', 
+                           headers={'X-Auth-User': 'test:tester', 
+                                    'X-Auth-Key': 'dummy'}, expect_errors=True)
+        self.assertEqual(res.status, '401 Unauthorized')
 
     # request relay in merge mode
     #@unittest.skip
@@ -386,3 +415,40 @@ class TestController(unittest.TestCase):
         print res.body
         self.assertEqual(body, res.body)
 
+    def test_get_merged_auth_resp(self):
+        req = Request.blank('/auth/v1.0')
+        req.headers['x-auth-user'] = 'test:tester'
+        req.headers['x-auth-key'] = 'testing'
+        location = 'both'
+        self.assertEqual(self.app.app.get_merged_auth_resp(req, location).status, '200 OK')
+        req = Request.blank('/auth/v1.0')
+        req.headers['x-auth-user'] = 'test:tester'
+        req.headers['x-auth-key'] = 'dummy'
+        location = 'both'
+        self.assertEqual(self.app.app.get_merged_auth_resp(req, location).status, '401 Unauthorized')
+
+
+    def test_no_exist_location(self):
+        res = self.app.get('/nothing/v1.0/auth', 
+                           headers={'X-Auth-User': 'test:tester', 
+                                    'X-Auth-Key': 'testing'},
+                           expect_errors=True)
+        self.assertEqual(res.status, '404 Not Found')
+        res = self.app.get('/nothing/v1.0/AUTH_test', headers=dict(X_Auth_Token='t__@@__v'), expect_errors=True)
+        self.assertEqual(res.status, '404 Not Found')
+
+
+    def test_put_container(self):
+        req = Request.blank('/')
+        location = 'both'
+        cont_prefix = 'hoge'
+        each_tokens = ['t', 'v']
+        account = 'AUTH_test'
+        container = 'TEST0'
+        res = self.app.app._create_container(req, location, 
+                                             cont_prefix, each_tokens,
+                                             account, container)
+        self.assertEqual(proxy0_srv.env['PATH_INFO'], '/v1.0/AUTH_test/TEST0')
+        self.assertEqual(proxy0_srv.env['SERVER_NAME'], '127.0.0.1')
+        self.assertEqual(proxy0_srv.env['SERVER_PORT'], '8080')
+        self.assertEqual(proxy0_srv.env['REQUEST_METHOD'], 'PUT')

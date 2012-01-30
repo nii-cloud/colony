@@ -128,10 +128,17 @@ class AuthProtocol(object):
             start_response(resp.status, resp.headerlist)
             return resp.body
 
+        env['swift.authorize'] = self.authorize_colony
+        env['swift.clean_acl'] = clean_acl
+
         #Look for authentication claims
         claims = self._get_claims(env)
         if not claims:
-            return self._reject_request(env, start_response)
+            # check acl by referer with no auth
+            if len(env['PATH_INFO'].split('/')) >= 4 and \
+                    env['REQUEST_METHOD'] == 'GET':
+                return self.app(env, start_response)
+            return self._reject_request(env, start_response)                
 
         # check auth token with no admin privilege. add by colony
         result = self._accession_by_auth_token(env, claims)
@@ -149,8 +156,6 @@ class AuthProtocol(object):
             (tenant, username, tenant, '')
             # (tenant, username, tenant, \
             #      'AUTH_%s' % tenant if self.admin_role in roles else '')
-        env['swift.authorize'] = self.authorize_colony
-        env['swift.clean_acl'] = clean_acl
         return self.app(env, start_response)
 
 
@@ -178,6 +183,8 @@ class AuthProtocol(object):
         """
         tenant, user, password = auth_user
         auth_resp = self._authreq_to_keystone(user, password)
+        if not auth_resp:
+            return None
         auth_token, auth_tenant, username, roles, storage_url = self._get_swift_info(auth_resp, self.region_name) 
         if auth_tenant != tenant:
             return None
@@ -199,7 +206,6 @@ class AuthProtocol(object):
         conn = connect('%s' % self.auth_netloc, timeout=10)
         conn.request('POST', '/v2.0/tokens', json.dumps(auth_req), req_headers)
         resp = conn.getresponse()
-        #print resp.status
         if resp.status != 200:
             return None
         data = resp.read()
@@ -222,10 +228,6 @@ class AuthProtocol(object):
         """
         add by colony.
         """
-        # memcache_client = cache_from_env(env)
-        # if memcache_client:
-        #     cached_auth_data = memcache_client.get(memcache_key)
-
         if not auth_resp.has_key('access'):
             return None
         auth_token = auth_resp['access']['token']['id']
@@ -334,7 +336,6 @@ class AuthProtocol(object):
                 if obj or '.rlistings' in groups:
                     self.logger.info('referer_allowed')
                     return None
-                return self.denied_response(req)
             if not req.remote_user:
                 return self.denied_response(req)
             for user_group in user_groups:
@@ -360,38 +361,25 @@ class AuthProtocol(object):
         except ValueError:
             return HTTPNotFound(request=req)
         if not account:
-            print 'no account'
             return self.denied_response(req)
         user_groups = (req.remote_user or '').split(',')
-        print 'request_remote_user: %s' % req.remote_user
-        print 'request_method: %s' % req.method
-        print 'acl found 0' if hasattr(req, 'acl') else 'acl not found 0'
         # authority of admin.
         if account in user_groups and \
                 (req.method not in ('DELETE', 'PUT') or container):
-            print 'authorize full through' 
             req.environ['swift_owner'] = True
             return None
         # authority of normal.
-        print 'acl found 1' if hasattr(req, 'acl') else 'acl not found 1'
         if hasattr(req, 'acl'):
-            print 'container acl: %s' % req.acl 
             referrers, groups = parse_acl(req.acl)
-            print 'referrers: %s' % referrers
-            print 'group: %s' % groups
             if referrer_allowed(req.referer, referrers):
                 if obj or '.rlistings' in groups:
-                    print 'referer_allowed'
                     return None
                 return self.denied_response(req)
             if not req.remote_user:
                 return self.denied_response(req)
             for user_group in user_groups:
                 if user_group in groups:
-                    print 'group_allowed: %s' % user_group
                     return None
-        print 'acl found 2' if hasattr(req, 'acl') else 'acl not found 2'
-        print 'request forbidden'
         return self.denied_response(req)
 
     def denied_response(self, req):
@@ -419,12 +407,3 @@ def app_factory(global_conf, **local_conf):
     conf = global_conf.copy()
     conf.update(local_conf)
     return AuthProtocol(None, conf)
-
-if __name__ == "__main__":
-    app = loadapp("config:" + \
-        os.path.join(os.path.abspath(os.path.dirname(__file__)),
-                     os.pardir,
-                     os.pardir,
-                    "examples/paste/auth_token.ini"),
-                    global_conf={"log_name": "auth_token.log"})
-    wsgi.server(eventlet.listen(('', 8090)), app)

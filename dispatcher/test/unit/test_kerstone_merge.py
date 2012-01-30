@@ -11,6 +11,7 @@ from swift.common.utils import normalize_timestamp, NullLogger
 from webob import Request, Response
 import json
 from urlparse import urlparse
+import types
 
 class TmpLogger():
     def write(self, *args):
@@ -43,7 +44,8 @@ class DummyApp(object):
         self.env = env
         req = Request(env)
         status = '200 OK'
-        return Response(status=status)
+        start_response(status, [('content-type', 'application/json')])
+        return '{"data": "None"}'
 
 class DummySrv(object):
     def __init__(self, base_url):
@@ -114,6 +116,12 @@ class TestController(unittest.TestCase):
                                                       'publicURL': 'http://192.168.2.1:10000/both/v1.0/AUTH_test'}]}], 
                                      'user': {'id': '3', 'roles': [{'id': '2', 'name': 'Member'}], 'name': 'tester'}}})
 
+    def test_get_bodies(self):
+        resp0 = Response(status='200 OK', body='{"num": "one"}')
+        resp1 = Response(status='200 OK', body='{"num": "two"}')
+        bodies = self.k._get_bodies([resp0, resp1])
+        self.assertTrue(isinstance(bodies, types.GeneratorType))
+
     def test_token_merge(self):
         """ token_merge """
         self.assertEqual(self.k._token_merge([access_token0['access']['token'],
@@ -147,6 +155,10 @@ class TestController(unittest.TestCase):
         urls = ['http://192.168.2.0:8080/v2.0/tokens', 
                 'http://172.16.2.0:8080/v2.0/tokens']
         self.assertEqual(self.k._get_merged_common_path(urls), '/v2.0/tokens')
+        urls = ['http://192.168.2.0:8080/v2.0/tokens', 
+                'http://172.16.2.0:8080/v2.0/dummy']
+        self.assertEqual(self.k._get_merged_common_path(urls), None)
+
 
     def test_merge_headers(self):
         """ merge_headers """
@@ -174,6 +186,8 @@ class TestController(unittest.TestCase):
                 'dispatcher_base_url': 'http://127.0.0.1:10000',
                 'region_name': 'RegionOne'}
         k = filter_factory(conf)(app)
+        resp = Request.blank('/auth/v1.0', headers={'X-Auth-Token': 't'}).get_response(k)
+        self.assertEqual(json.loads(resp.body), {'data': 'None'})
         resp = Request.blank('/both/v2.0/dummy_tokens', headers={'X-Auth-Token': 't'}).get_response(k)
         self.assertEqual(keystone0_srv.env['PATH_INFO'], '/v2.0/dummy_tokens')
 
@@ -208,6 +222,17 @@ class TestController(unittest.TestCase):
                                                        {'username': 'tester', 'password': 'testing'}, 
                                                        'tenantId': ''}})).get_response(k)
         self.assertEqual(json.loads(resp.body), result)
+        resp = Request.blank('/both/v2.0/tokens',
+                             method='POST',
+                             headers={'Content-Type': 'application/json'},
+                             body=json.dumps({'auth': {'token': {'id': 't__@@__v'}, 'tenantId': ''}})).get_response(k)
+        self.assertEqual(json.loads(resp.body), result)
+        resp = Request.blank('/both/v2.0/tokens',
+                             method='POST',
+                             headers={'Content-Type': 'application/json'},
+                             body=json.dumps({'auth': {'token': {'id': 't'}, 'tenantId': ''}})).get_response(k)
+        self.assertEqual(json.loads(resp.body), {'data': 'None'})
+
 
 # test data
 access_token0 = {'access': 
