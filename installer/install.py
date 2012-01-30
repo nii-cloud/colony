@@ -1,4 +1,5 @@
 
+import argparse
 import glob
 import os
 import subprocess
@@ -18,7 +19,7 @@ def run_command(cmd, redirect_output=True, check_exit_code=True):
     if redirect_output:
         stdout = subprocess.PIPE
     else:
-        stdout = None
+        stdout = open("install.log", "a+")
 
     proc = subprocess.Popen(cmd, cwd=os.path.curdir, stdout=stdout)
     output = proc.communicate()[0]
@@ -40,7 +41,7 @@ class ConfigItem(object):
 
     @property
     def value(self):
-        return self._value
+        return self._value if self._value else self._default_value
 
     @property
     def default_value(self):
@@ -51,11 +52,15 @@ class ConfigItem(object):
         return self._install
 
     def ask(self):
-        v = raw_input('%s : [default:%s]' % (self._name, self._default_value))
-        if not v:
-           v = self._default_value
-        # validator
+        try:
+            v = raw_input('%s : [%s]' % (self._name, self.value))
+            if not v:
+                v = self._default_value
+        except EOFError:
+            print ""
+            v = self._default_value
         self._value = v
+        # validator
         self._install = True
 
     def to_dict(self):
@@ -108,20 +113,46 @@ class Config(object):
         self._load_components_config()
     
     def _ask(self, name):
-        v = raw_input('installing :%s y/N ?' % name)
-        if v in ['Y', 'y']:
-            return True
+        try:
+            v = raw_input('installing :%s y/N ?' % name)
+            if v in ['Y', 'y']:
+                return True
+        except EOFError:
+            print ""
+
         return False
 
-    def ask(self):
-        for config in self._configs:
-            config.ask()
+    def _ask_item(self):
+        conflen = len(self._configs)
+        try:
+            v = raw_input('Choose Item number: ')
+            item = int(v)
+            if item == conflen:
+                return False
+            if item >= 0 and item <= conflen:
+                self._configs[item].ask()
+        except (EOFError, ValueError):
+            print ""
+        return True
 
+    def _menu(self):
+        for x in range(len(self._configs)):
+            c = self._configs[x]
+            print "%d: %s [%s]" % (x, c.name, c.value)
+        # put last value
+        print "%d: Quit" % (len(self._configs))
+  
+    def ask(self):
         for comp_name, components_configs in self.components.iteritems():
             # check install components
             if self._ask(comp_name):
                 for config in components_configs:
                     config.ask()
+        while True:
+            self._menu()
+            if not self._ask_item():
+                break
+
 
 
 class ConfigManager(object):
@@ -149,22 +180,27 @@ class ConfigManager(object):
             self._softwares[name] = c
 
     def _ask(self, name, install=True):
-        if install:
-            v = raw_input('installing :%s y/N ?' % name)
-        else:
-            v = raw_input('Uninstalling :%s y/N ?' % name)
-        if v in ['Y', 'y']:
-            return True
+        try:
+             if install:
+                 v = raw_input('installing :%s y/N ?' % name)
+             else:
+                 v = raw_input('Uninstalling :%s y/N ?' % name)
+             if v in ['Y', 'y']:
+                 return True
+        except EOFError:
+            print ''
+
         return False
         
-    def ask(self, install=True):
+    def ask(self, components, install=True):
         for name, value in self._softwares.iteritems():
-            if self._ask(name):
+            if self._ask(name, install):
                 if install:
                     value.ask()
                 for comp_name, comp_configs in value.components.iteritems():
                     scripts = self._get_install_scripts(name, comp_name, install)
                     if os.path.exists(scripts):
+                        print 'executing scripts %s' % scripts
                         if not run_command(scripts, redirect_output=False):
                             print "installing failure"
                     for comp_config in comp_configs:
@@ -173,13 +209,24 @@ class ConfigManager(object):
                             dump_config(value.config, template_path, comp_config.value)
 
 
-cm = ConfigManager()
-cm.ask()
+#parse arg
+argparser = argparse.ArgumentParser()
+argparser.add_argument('--version', action='version', version='%(prog)s 1.0')
+argparser.add_argument('--components', action='append', dest='installs', default=[],
+                       help='component name which to be installed')
+argparser.add_argument('--uninstall', action='store_false', default=True, dest='install')
+argparser.add_argument('--local', action='store_true', default=False, dest='local')
+args = argparser.parse_args()
 
-"""
-for file in files:
-    c = Config(file)
-    c.load()
-    c.ask()
-    dump_config(c.config)
-"""
+if args.local:
+   os.environ['PIP_FIND_LINKS'] = "file:///%s/cache" % os.path.realpath(os.path.dirname(sys.argv[0]))
+
+try:
+    cm = ConfigManager()
+    cm.ask(args.installs, args.install)
+except KeyboardInterrupt:
+    print "install intruppted\n"
+except Exception as e:
+    print e
+    raise e
+

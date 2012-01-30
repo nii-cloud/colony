@@ -1,0 +1,38 @@
+description: colony keystone
+
+components:
+  - name: colony_keystone
+
+
+config_item_defaults:
+  - name: openstack_compute_enabled
+    value: False
+  - name: openstack_keystone_url
+    value: "http://localhost:5000/v2.0"
+  - name: openstack_keystone_admin_url
+    value: "http://localhost:35357/v2.0"
+  - name: openstack_keystone_default_role
+    value: 'Member'
+  - name: swift_enabled
+    value: True
+  - name: image_metadata_glance_enabled
+    value: False
+  - name: quantum_enabled
+    value: False
+  - name: quantum_url
+    value: "127.0.0.1"
+  - name: quantum_port
+    value: "9696"
+  - name: quantum_tenant
+    value: "1234"
+  - name: quantum_client_version
+    value: "0.1"
+
+component_config_defaults:
+  - path: /tmp/local_settings.py
+    component: colony_keystone
+
+software_config_defaults:
+
+test_components:
+  - component: colony_keystone

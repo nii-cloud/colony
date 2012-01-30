@@ -28,7 +28,7 @@ import sys
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-VENV = os.path.join(ROOT, '.installer-venv')
+VENV = os.path.join(ROOT, '.dispatcher-venv')
 PIP_REQUIRES = os.path.join(ROOT, 'tools', 'pip-requires')
 
 
@@ -82,7 +82,7 @@ def create_virtualenv(venv=VENV):
     virtual environment
     """
     print 'Creating venv...',
-    run_command(['virtualenv', '-q', '--no-site-packages', venv])
+    run_command(['virtualenv', '-q', '--no-site-packages', VENV])
     print 'done.'
     print 'Installing pip in virtualenv...',
     if not run_command(['tools/with_venv.sh', 'easy_install', 'pip']).strip():
@@ -99,12 +99,12 @@ def install_dependencies(venv=VENV):
     run_command([venv_tool, 'pip', 'install', '-E', venv, '-r', PIP_REQUIRES],
                 redirect_output=False)
 
-    # Tell the virtual env how to "import installer"
+    # Tell the virtual env how to "import keystone"
 
     for version in ['python2.7', 'python2.6']:
         pth = os.path.join(venv, "lib", version, "site-packages")
         if os.path.exists(pth):
-            pthfile = os.path.join(pth, "installer.pth")
+            pthfile = os.path.join(pth, "keystone.pth")
             f = open(pthfile, 'w')
             f.write("%s\n" % ROOT)
 
@@ -116,10 +116,10 @@ def print_help():
  Keystone development uses virtualenv to track and manage Python dependencies
  while in development and testing.
 
- To activate the Keystone virtualenv for the extent of your current shell
+ To activate the Dispatcher virtualenv for the extent of your current shell
  session you can run:
 
- $ source .installer-venv/bin/activate
+ $ source .dispatcher-venv/bin/activate
 
  Or, if you prefer, you can run commands in the virtualenv on a case by case
  basis by running:
@@ -132,14 +132,9 @@ def print_help():
 
 
 def main(argv):
-    env = None
-    if os.environ.get('COLONY_INSTALL_HOME', None):
-        env=os.environ['COLONY_INSTALL_HOME']
-    else:
-        env=VENV
     check_dependencies()
-    create_virtualenv(env)
-    install_dependencies(env)
+    create_virtualenv()
+    install_dependencies()
     print_help()
 
 if __name__ == '__main__':

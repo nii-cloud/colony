@@ -7,7 +7,7 @@ ctx = None
 def init_ctx():
     global ctx
     if not ctx:
-        ctx = rython.RubyContext(requires=['erb'], port=12345,debug=True)
+        ctx = rython.RubyContext(requires=['erb'], debug=True)
         ctx.load()
 
 def get_ctx():
