@@ -348,9 +348,11 @@ def acl(request, tenant_id, container_name):
     #if container.headers.get('x-container-write'):
     #   ref, groups = utils.parse_acl(container.headers.get('x-container-write'))
 
+    """
     ref, groups = parse_acl('test:test,hoge,.r:*')
     read_ref, read_groups = ref, groups 
     write_ref, write_groups = ref, groups 
+    """
 
     return shortcuts.render_to_response(
     'django_openstack/dash/containers/acl.html', {
