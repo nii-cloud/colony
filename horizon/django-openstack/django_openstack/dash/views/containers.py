@@ -129,14 +129,15 @@ class ContainerAclRemove(forms.SelfHandlingForm):
         acl = clean_acl(type, acl_value)
         groups, refs = parse_acl(acl_value)
 
-        groups.remove(header)
-        refs.remove(header)
+        if header in groups:
+            groups.remove(header)
+        if header in refs:
+            refs.remove(header)
 
         # set header
         hdrs = {}
         hdrs[type] = ','.join(groups + refs)
 
-        print hdrs
         api.swift_set_container_info(request, container_name, hdrs)
 
         return shortcuts.redirect(request.build_absolute_uri())
@@ -153,17 +154,36 @@ class ContainerAcl(forms.SelfHandlingForm):
         super(ContainerAcl, self).__init__(*args, **kwargs)
 
     def handle(self, request, data):
-        container_name = data['container_name']
-        acl_type = data['acl_type']
-        if acl_type:
+
+
+        def disp_error():
+            messages.error(request, "Invalid Argument")
+
+        try:
+            container_name = data['container_name']
+            acl_type = data['acl_type']
+        except KeyError:
+            disp_error()
+            return
+
+        if acl_type == "1":
            type = 'X-Container-Read'
-           acl_value = data['read_acl']
-        else:
+           acl_value = data.get('read_acl', '')
+        elif acl_type == "0":
            type = 'X-Container-Write'
-           acl_value = data['write_acl']
+           acl_value = data.get('write_acl', '')
+        else:
+           disp_error()
+           return
+
 
         # clean and parse acl
-        acl = clean_acl(type, data['acl_add'])
+        try:
+            acl = clean_acl(type, data['acl_add'])
+        except KeyError:
+            disp_error()
+            return
+
         acl_orig = clean_acl(type, acl_value)
         group_add, ref_add = parse_acl(acl)
         group_orig, ref_orig = parse_acl(acl_orig)

@@ -708,7 +708,7 @@ def token_create_by_email(request, email):
     return Token(gakunin_api(request).gakunin.create_token_by_email(email))
 
 def token_create_by_eppn(request, eppn):
-    return Token(gakunin_api(request).gakunin.create_token_by_email(eppn))
+    return Token(gakunin_api(request).gakunin.create_token_by_eppn(eppn))
 
 def token_create(request, tenant, username, password):
     return Token(auth_api().tokens.create(tenant, username, password))

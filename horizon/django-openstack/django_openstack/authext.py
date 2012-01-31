@@ -49,17 +49,12 @@ class GakuninAuthManager(base.ManagerWithFind):
     resource_class = GakuninAuth
 
     def create_token_by_email(self, email):
-        params = {"auth": {"passwordCredentials": {"email": username,
-                           "password": password},
-                           "tenantId": tenant}}
+        params = {"auth": {"tokenByEmail": {"email": email}}}
+        return self._create('token_by/email', params, "access")
 
-        return self._create('tokens', params, "access")
-
-    def create_token_by_eppi(self, eppi):
-        params = {"auth": {"passwordCredentials": {"eppi": username,
-                           "password": password},
-                           "tenantId": tenant}}
-        return self._create('tokens', params, "access")
+    def create_token_by_eppi(self, eppn):
+        params = {"auth": {"tokenByEppn": {"eppn": eppn}}
+        return self._create('token_by/eppn', params, "access")
 
 class AdminExt(openstackx.admin.Admin):
 
