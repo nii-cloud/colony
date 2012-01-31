@@ -120,7 +120,7 @@ class ContainerAclRemove(forms.SelfHandlingForm):
 class ContainerAcl(forms.SelfHandlingForm):
     ''' Form that handles Swift Container Acl '''
     container_name = forms.CharField(widget=forms.HiddenInput())
-    acl_type = forms.ChoiceField(choices=((1, 'ReadAcl'),(0,'WriteAcl')), widget=forms.RadioSelect)
+    acl_type = forms.ChoiceField(label="ACL Type", choices=((1, 'ReadAcl'),(0,'WriteAcl')), initial=1, widget=forms.RadioSelect)
     read_acl = forms.CharField(widget=forms.HiddenInput(), required=False)
     write_acl = forms.CharField(widget=forms.HiddenInput(), required=False)
     acl_add = forms.CharField(max_length="255", label="ACL", required=True)
