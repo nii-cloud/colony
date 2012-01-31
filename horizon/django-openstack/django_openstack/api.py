@@ -57,7 +57,7 @@ import logging
 
 try:
     import openstack.compute
-    import openstackx.admin
+    from django_openstack import authext
     import openstackx.api.exceptions as api_exceptions
     import openstackx.extras
     import openstackx.auth
@@ -255,7 +255,7 @@ class Usage(APIResourceWrapper):
 
 class User(APIResourceWrapper):
     """Simple wrapper around openstackx.extras.users.User"""
-    _attrs = ['email', 'enabled', 'id', 'tenantId', 'name']
+    _attrs = ['email', 'enabled', 'id', 'tenantId', 'name', 'eppn']
 
 
 class Role(APIResourceWrapper):
@@ -413,6 +413,12 @@ def admin_api(request):
     return openstackx.admin.Admin(auth_token=request.user.token,
                                  management_url=url_for(request, 'compute', True))
 
+def gakunin_api(request):
+    LOG.debug('admin_api connection created using token "%s"'
+                    ' and url "%s"' %
+                    (request.user.token, url_for(request, 'compute', True)))
+    return authext.AdminExt(auth_token=request.user.token,
+                                 management_url=url_for(request, 'compute', True))
 
 def extras_api(request):
     LOG.debug('extras_api connection created using token "%s"'
@@ -698,6 +704,11 @@ def tenant_update(request, tenant_id, tenant_name, description, enabled):
                                                       description,
                                                       enabled))
 
+def token_create_by_email(request, email):
+    return Token(gakunin_api(request).gakunin.create_token_by_email(email))
+
+def token_create_by_eppn(request, eppn):
+    return Token(gakunin_api(request).gakunin.create_token_by_email(eppn))
 
 def token_create(request, tenant, username, password):
     return Token(auth_api().tokens.create(tenant, username, password))
@@ -792,6 +803,8 @@ def user_update_password(request, user_id, password):
 def user_update_tenant(request, user_id, tenant_id):
     return User(account_api(request).users.update_tenant(user_id, tenant_id))
 
+def user_update_eppn(request, user_id, eppn):
+    return User(gakunin_api(request).userext.update_eppn(user_id, eppn))
 
 def _get_role(request, name):
     roles = account_api(request).roles.list()
