@@ -964,7 +964,18 @@ def swift_set_object_info(request, container_name, object_name, meta):
 def swift_get_object_info(request, container_name, object_name):
     container = swift_api(request).get_container(container_name)
     object = container.get_object(object_name)
+    return object.metadata
 
+def swift_remove_object_info(request, container_name, object_name, meta):
+    container = swift_api(request).get_container(container_name)
+    object = container.get_object(object_name)
+    for key, value in meta.iteritems():
+        try:
+            del object.metadata[key]
+        except KeyError:
+            pass
+    object.sync_metadata()
+    
 def quantum_list_networks(request):
     return quantum_api(request).list_networks()
 

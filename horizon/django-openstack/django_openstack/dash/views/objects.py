@@ -146,10 +146,12 @@ class ObjectMeta(forms.SelfHandlingForm):
         container_name = data['container_name']
         object_name = data['object_name']
 
-        hdrs = {}
-        hdrs[header] = value
-
-        api.swift_set_object_info(request, container_name, object_name, hdrs)
+        if not header.lower().startswith('x-object-meta-'):
+            messages.error(request, 'Object metadata must begin with x-object-meta-')
+        else:
+            hdrs = {}
+            hdrs[header[14:]] = value
+            api.swift_set_object_info(request, container_name, object_name, hdrs)
 
         return shortcuts.redirect(request.build_absolute_uri())
 
@@ -166,10 +168,12 @@ class ObjectMetaRemove(forms.SelfHandlingForm):
         container_name = data['container_name']
         object_name = data['object_name']
 
-        hdrs = {}
-        hdrs[header] = ''
-
-        api.swift_set_object_info(request, container_name, object_name, hdrs)
+        if not header.lower().startswith('x-object-meta-'):
+            messages.error(request, 'Object metadata must begin with x-object-meta-')
+        else:
+            hdrs = {}
+            hdrs[header[14:]] = ''
+            api.swift_remove_object_info(request, container_name, object_name, hdrs)
 
         return shortcuts.redirect(request.build_absolute_uri())
  
@@ -262,7 +266,7 @@ def meta(request, tenant_id, container_name, object_name):
     headers = []
     if metadata:
         for h, v in metadata.iteritems():
-            headers.append((h,v))
+            headers.append(('%s-%s' % ('x-object-meta',h) ,v))
     return render_to_response(
         'django_openstack/dash/objects/meta.html',
         {'container_name': container_name,
