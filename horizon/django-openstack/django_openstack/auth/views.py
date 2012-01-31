@@ -99,7 +99,7 @@ class Login(forms.SelfHandlingForm):
             request.session['token'] = token.id
             request.session['user'] = data['username']
 
-            return shortcuts.redirect('dash_overview')
+            return shortcuts.redirect('dash_containers', tenant.id)
 
         except api_exceptions.Unauthorized as e:
             msg = 'Error authenticating: %s' % e.message
@@ -126,7 +126,7 @@ def login(request):
         if request.user.is_admin():
             return shortcuts.redirect('syspanel_overview')
         else:
-            return shortcuts.redirect('dash_overview')
+            return shortcuts.redirect('dash_containers', request.user.tenant_id)
 
     form, handled = Login.maybe_handle(request)
     if handled:

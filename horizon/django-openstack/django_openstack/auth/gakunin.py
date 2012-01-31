@@ -115,14 +115,12 @@ def login(request):
         if request.user.is_admin():
             return shortcuts.redirect('syspanel_overview')
         else:
-            return shortcuts.redirect('dash_overview')
+            return shortcuts.redirect('dash_containers', request.user.tenant_id)
 
     # check ssl
-    """
     if not request.is_secure():
         messages.error(request, "Gakunin Support needs to be accessed through TLS")
         return shortcuts.redirect('auth_login')
-    """
     from_email = request.META.get('email', None)
     from_eppn = request.META.get('eppn', None)
 
@@ -134,7 +132,6 @@ def login(request):
     # second, try by email
     if not token and from_email:
         token = api.token_create_by_email(request, email)
-
 
     def get_first_tenant_for_user():
         tenants = api.tenant_list_for_token(request, token.id)
@@ -163,5 +160,5 @@ def login(request):
     request.session['serviceCatalog'] = token.serviceCatalog
     request.session['token'] = token.id
 
-    return shortcuts.redirect('dash_container_view')
+    return shortcuts.redirect('dash_containers', tenant.id)
 
