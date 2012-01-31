@@ -1,9 +1,6 @@
 # coding=utf-8
 from __future__ import with_statement
-try:
-    import simplejson as json
-except ImportError:
-    import json
+import simplejson as json
 from base64 import urlsafe_b64encode, urlsafe_b64decode
 from urllib import quote, unquote, urlencode
 from urlparse import urlparse, urlunparse, parse_qs
@@ -15,14 +12,12 @@ from webob.exc import HTTPException, HTTPAccepted, HTTPBadRequest, \
     HTTPBadGateway,  HTTPRequestEntityTooLarge, HTTPServerError
 from eventlet import GreenPile, Queue, sleep, TimeoutError
 from eventlet.timeout import Timeout
-#from eventlet.green.httplib import HTTPConnection, HTTPResponse, HTTPSConnection
 from swift.common.utils import get_logger, ContextPool
 from swift.common.exceptions import ConnectionTimeout, ChunkReadTimeout, ChunkWriteTimeout
 from swift.common.constraints import CONTAINER_LISTING_LIMIT, MAX_ACCOUNT_NAME_LENGTH, \
     MAX_CONTAINER_NAME_LENGTH, MAX_FILE_SIZE
 from swift.common.bufferedhttp import http_connect_raw, BufferedHTTPConnection, BufferedHTTPResponse
 from swift.proxy.server import update_headers
-from dispatcher.common.fastestmirror import FastestMirror
 from dispatcher.common.location import Location
 import os
 import sys
@@ -55,7 +50,11 @@ class RelayRequest(object):
             return False
 
     def split_netloc(self, parsed_url):
-        host, port = parsed_url.netloc.split(':')
+        if parsed_url.netloc.find(':') > 0:
+            host, port = parsed_url.netloc.split(':')
+        else:
+            host = parsed_url.netloc
+            port = None
         if not port:
             if parsed_url.scheme == 'http':
                 port = '80'
@@ -79,34 +78,10 @@ class RelayRequest(object):
                     self.logger.debug('Trying to write to %s' % path)
             conn.queue.task_done()
 
-    def _connect_server(self,  host, port, method, path, headers, query_string):
-        with ConnectionTimeout(self.conn_timeout):
-            conn = http_connect_raw(host, port, method, path, 
-                                    headers=headers, query_string=query_string)
-            return conn
-
-    def _connect_put_node(self, host, port, method, path, headers, query_string):
-        """Method for a file PUT connect"""
-        try:
-            with ConnectionTimeout(self.app.conn_timeout):
-                conn = http_connect_raw(host, port, method, path, 
-                                        headers=headers, query_string=query_string)
-            with Timeout(self.app.node_timeout):
-                resp = conn.getexpect()
-            if resp.status == 100:
-                conn.node = node
-                return conn
-            elif resp.status == 507:
-                self.error_limit(node)
-        except:
-            print 'Expect: 100-continue on %s' % path
-
-
     def __call__(self):
         """
         :return httplib.HTTP(S)Connection in success, and webob.exc.HTTPException in failure
         """
-
         if self.headers.has_key('content-length'):
             if int(self.headers['content-length']) >= MAX_FILE_SIZE:
                 return HTTPRequestEntityTooLarge(request=self.req)
@@ -148,8 +123,12 @@ class RelayRequest(object):
                                 if chunked:
                                     conn.queue.put('0\r\n\r\n')
                                 break
+                            except TypeError, err:
+                                self.logger.info('Chunk Read Error: %s' % err)
+                                break
                             except Exception, err:
-                                self.logger.debug('Chunk Read Error: %s' % err)
+                                self.logger.info('Chunk Read Error: %s' % err)
+                                return HTTPServerError(request=self.req)
                         bytes_transferred += len(chunk)
                         if bytes_transferred > MAX_FILE_SIZE:
                             return HTTPRequestEntityTooLarge(request=self.req)
@@ -171,17 +150,17 @@ class RelayRequest(object):
                         try:
                             resp = conn.getresponse()
                         except Exception, err:
-                            self.logger.debug('get response of PUT Error: %s' % err)
+                            self.logger.info('get response of PUT Error: %s' % err)
                         if isinstance(resp, BufferedHTTPResponse):
                             break
                         else:
                             sleep(0.1)
                 return resp
             except ChunkReadTimeout, err:
-                self.logger.debug("ChunkReadTimeout: %s" % err)
+                self.logger.info("ChunkReadTimeout: %s" % err)
                 return HTTPRequestTimeout(request=self.req)
             except (Exception, TimeoutError), err:
-                self.logger.debug("Error: %s" % err)
+                self.logger.info("Error: %s" % err)
                 return HTTPGatewayTimeout(request=self.req)
         else:
             try:
@@ -193,7 +172,6 @@ class RelayRequest(object):
             except (Exception, TimeoutError), err:
                 self.logger.debug("get response of GET or misc Error: %s" % err)
                 return HTTPGatewayTimeout(request=self.req)
-
 
 class Dispatcher(object):
     """ """
@@ -225,6 +203,10 @@ class Dispatcher(object):
         if self.loc.age == 0:
             self.logger.warn('dispatcher relay rule is invalid, using old rules now.')
         loc_prefix = self.location_check(req)
+        if not self.loc.has_location(loc_prefix):
+            resp = HTTPNotFound(request=req)
+            start_response(resp.status, resp.headerlist)
+            return resp.body
         if self.loc.is_merged(loc_prefix):
             self.logger.debug('enter merge mode')
             resp = self.dispatch_in_merge(req, loc_prefix)
@@ -235,8 +217,9 @@ class Dispatcher(object):
         start_response(resp.status, resp.headerlist)
         if req.method in ('PUT', 'POST'):
             return resp.body
-        return resp.app_iter if resp.app_iter is not None else resp.body
-
+        return resp.app_iter \
+            if resp.app_iter is not None \
+            else resp.body
 
     def dispatch_in_normal(self, req, location):
         """ request dispatcher in normal mode """
@@ -293,9 +276,7 @@ class Dispatcher(object):
             return self.get_merged_containers_resp(req, location)
         return HTTPNotFound(request=req)
 
-
     # return Response object
-
     def get_merged_auth_resp(self, req, location):
         """ """
         resps = []
@@ -472,6 +453,12 @@ class Dispatcher(object):
         max_segment = obj_size / self.swift_store_large_chunk_size + 1
         cur = str(time.time())
         body = StringIO(from_resp.body)
+        seg_cont = '%s_segments' % container
+        cont_resp = self._create_container(to_req, location, 
+                                           cont_prefix, each_tokens, 
+                                           from_real_path_ls[1], seg_cont)
+        if cont_resp.status_int != 201 and put_cont_resp.status_int != 202:
+            return cont_resp
         for seg in range(max_segment):
             """ 
             <name>/<timestamp>/<size>/<segment> 
@@ -482,7 +469,7 @@ class Dispatcher(object):
             chunk = body.read(self.swift_store_large_chunk_size)
             to_resp = self._create_put_req(to_req, location, 
                                            cont_prefix, each_tokens, 
-                                           from_real_path_ls[1], container, 
+                                           from_real_path_ls[1], seg_cont, 
                                            split_obj_name, None,
                                            chunk,
                                            len(chunk))
@@ -491,16 +478,14 @@ class Dispatcher(object):
                 return self.check_error_resp([to_resp])
         # upload object manifest
         body.close() 
-        to_req.headers['x-object-manifest'] = '%s/%s/%s/%s/' % (container, obj, cur, obj_size)
+        to_req.headers['x-object-manifest'] = '%s/%s/%s/%s/' % (seg_cont, obj, cur, obj_size)
         return self._create_put_req(to_req, location, 
                                     cont_prefix, each_tokens, 
                                     from_real_path_ls[1], container, obj, query,
                                     '',
                                     0)
 
-
     # utils
-
     def check_error_resp(self, resps):
         status_ls = [r.status_int for r in resps]
         if [s for s in status_ls if not str(s).startswith('20')]:
@@ -524,7 +509,6 @@ class Dispatcher(object):
         else:
             path = req.path.split('/')[1:]
         return [p for p in path if p]
-
 
     def _auth_check(self, req):
         if 'x-auth-token' in req.headers or 'x-storage-token' in req.headers:
@@ -562,7 +546,6 @@ class Dispatcher(object):
         cont_prefix = self._get_container_prefix(cont)
         real_cont = cont.split(cont_prefix + ':')[1] if cont_prefix else cont
         return cont_prefix, real_cont, obj
-
 
     def _merge_headers(self, resps, location):
         """ """
@@ -653,7 +636,6 @@ class Dispatcher(object):
             return None
         return auth_token.split(self.merged_combinator_str)
 
-
     def _get_servers_subscript_by_prefix(self, location, prefix):
         swift_svrs = self.loc.servers_by_container_prefix_of(location, prefix)
         i = 0
@@ -668,7 +650,6 @@ class Dispatcher(object):
             i += 1
         return i
 
-
     def _combinate_url(self, req, swift_svr, real_path, query):
         parsed = urlparse(req.url)
         choiced = urlparse(swift_svr)
@@ -679,6 +660,22 @@ class Dispatcher(object):
                urlencode(query, True) if query else None,
                parsed.fragment)
         return urlunparse(url)
+
+    def _create_container(self, to_req, location, prefix, each_tokens, 
+                              account, cont):
+        """ """
+        to_swift_svrs = self.loc.servers_by_container_prefix_of(location, prefix)
+        to_token = each_tokens[self._get_servers_subscript_by_prefix(location, prefix)]
+        to_real_path = '/%s/%s/%s' % (self.req_version_str, account, cont)
+        to_real_path_ls = to_real_path.split('/')[1:]
+        to_url = self._combinate_url(to_req, to_swift_svrs[0], to_real_path, None)
+        to_req.headers['x-auth-token'] = to_token
+        to_req.method = 'PUT'
+        to_resp = self.relay_req(to_req, to_url,
+                                 to_real_path_ls,
+                                 to_swift_svrs,
+                                 self.loc.webcache_of(location))
+        return to_resp
 
     def _create_put_req(self, to_req, location, prefix, each_tokens, 
                        account, cont, obj, query, body, to_size):
@@ -771,14 +768,10 @@ class Dispatcher(object):
                     e['name'] = prefix + self.combinater_char + e['name']
                     merge_body.append(e)
             return json.dumps(merge_body)
-        elif content_type.startswith('application/xml'):
-            pass
         else:
             pass
 
-
     # relay request
-
     def relay_req(self, req, req_url, path_str_ls, relay_servers, webcaches):
         """ """
         # util
