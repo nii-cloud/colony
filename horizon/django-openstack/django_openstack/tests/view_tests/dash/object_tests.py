@@ -252,8 +252,8 @@ class ObjectViewTests(base.BaseViewTests):
                     'object_name' : OBJECT_NAME,
                     'header_name' : 'x-object-meta-hoge'
                    }
-        self.mox.StubOutWithMock(api, 'swift_set_object_info')
-        api.swift_set_object_info(IsA(http.HttpRequest),
+        self.mox.StubOutWithMock(api, 'swift_remove_object_info')
+        api.swift_remove_object_info(IsA(http.HttpRequest),
                                   unicode(self.CONTAINER_NAME),
                                   OBJECT_NAME,
                                   { 'x-object-meta-hoge' : '' }
@@ -264,6 +264,10 @@ class ObjectViewTests(base.BaseViewTests):
                                       args=[self.TEST_TENANT,
                                             self.CONTAINER_NAME,
                                             OBJECT_NAME]), formData)
+        self.assertRedirectsNoFollow(res, reverse('dash_objects_meta',
+                                                  args=[self.TEST_TENANT,
+                                                        self.CONTAINER_NAME,
+                                                        OBJECT_NAME]))
 
         self.mox.VerifyAll()
 

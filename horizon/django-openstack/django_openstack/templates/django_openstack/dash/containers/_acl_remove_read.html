@@ -3,9 +3,9 @@
   {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
   <input type="hidden" name="header_name" value="{{acl}}" />
   <input type="hidden" name="container_name" value="{{container_name}}" />
-  <input type="hidden" name="acl_type" value="write" />
-  <input type="hidden" name="acl_value" value="{{write_acl}}" />
+  <input type="hidden" name~"acl_type" value="read" />
+  <input type="hidden" name~"acl_value" value="{{read_acl}}" />
   <div class="fuga">
-    <button id="acl_remove_write_{{acl}}" type="submit" class="delete" value="Delete" title="{{acl}}" style="font-size:10px">Remove</button>
+    <button id="acl_remove_read_{{acl}}" type="submit" class="delete" value="Delete" title="{{acl}}" style="font-size:10px">Remove</button>
   </div>
 </form>

@@ -257,6 +257,7 @@ class ContainerViewTests(base.BaseViewTests):
         formData = {'container_name' : 'containerName',
                     'method' : 'ContainerAcl',
                     'acl_add' : 'test',
+                    'acl_type' : 1,
                     'write_acl' : ''}
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
         api.swift_set_container_info(
@@ -273,6 +274,7 @@ class ContainerViewTests(base.BaseViewTests):
     def test_container_acl_put_write_duplicate(self):
         formData = {'container_name' : 'containerName',
                     'method' : 'ContainerAcl',
+                    'acl_type' : 1,
                     'acl_add' : 'test',
                     'write_acl' : 'test'}
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
@@ -291,6 +293,7 @@ class ContainerViewTests(base.BaseViewTests):
         formData = {'container_name' : 'containerName',
                     'method' : 'ContainerAcl',
                     'acl_add' : 'test',
+                    'acl_type' : 0,
                     'read_acl' : ''}
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
         api.swift_set_container_info(
@@ -307,6 +310,7 @@ class ContainerViewTests(base.BaseViewTests):
     def test_contianer_acl_put_read_duplicate(self):
         formData = {'container_name' : 'containerName',
                     'method' : 'ContainerAcl',
+                    'acl_type' : 0,
                     'acl_add' : 'test',
                     'read_acl' : 'test'}
         self.mox.StubOutWithMock(api, 'swift_set_container_info')

@@ -107,6 +107,8 @@ class ContainerMeta(forms.SelfHandlingForm):
 class ContainerAclRemove(forms.SelfHandlingForm):
     container_name = forms.CharField(widget=forms.HiddenInput())
     header_name = forms.CharField(widget=forms.HiddenInput())
+    acl_type = forms.CharField(widget=forms.HiddenInput())
+    acl_value = forms.CharField(widget=forms.HiddenInput())
 
     def __init__(self, *args, **kwargs):
         super(ContainerAclRemove, self).__init__(*args, **kwargs)
@@ -114,6 +116,28 @@ class ContainerAclRemove(forms.SelfHandlingForm):
     def handle(self, request, data):
         header = data['header_name']
         container_name = data['container_name']
+        acl_type = data['acl_type']
+        acl_value = data['acl_value']
+
+        if acl_type == "read":
+            type = 'X-Container-Read'
+        elif acl_type == "write":
+            type = 'X-Container-Write'
+        else:
+            pass
+        # clean and parse acl
+        acl = clean_acl(type, acl_value)
+        groups, refs = parse_acl(acl_value)
+
+        groups.remove(header)
+        refs.remove(header)
+
+        # set header
+        hdrs = {}
+        hdrs[type] = ','.join(groups + refs)
+
+        print hdrs
+        api.swift_set_container_info(request, container_name, hdrs)
 
         return shortcuts.redirect(request.build_absolute_uri())
 
@@ -311,11 +335,11 @@ def acl(request, tenant_id, container_name):
     read_ref, read_groups, write_ref, write_groups = [],[],[],[]
     read_acl, write_acl = '', ''
     for h,v in container.headers:
-        if 'x-container-read' == h:
+        if 'x-container-read' == h.lower():
             v = clean_acl('X-Container-Read', v)
             read_ref, read_groups = parse_acl(v)
             read_acl = v
-        if 'x-container-write' == h:
+        if 'x-container-write' == h.lower():
             v = clean_acl('X-Container-Write', v)
             write_ref, write_groups = parse_acl(v)
             write_acl = v
@@ -324,9 +348,9 @@ def acl(request, tenant_id, container_name):
     #if container.headers.get('x-container-write'):
     #   ref, groups = utils.parse_acl(container.headers.get('x-container-write'))
 
-    #ref, groups = parse_acl('test:test,hoge,.r:*')
-    #read_ref, read_groups = ref, groups 
-    #write_ref, write_groups = ref, groups 
+    ref, groups = parse_acl('test:test,hoge,.r:*')
+    read_ref, read_groups = ref, groups 
+    write_ref, write_groups = ref, groups 
 
     return shortcuts.render_to_response(
     'django_openstack/dash/containers/acl.html', {
