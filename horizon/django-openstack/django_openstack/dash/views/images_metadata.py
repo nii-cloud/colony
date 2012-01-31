@@ -52,22 +52,17 @@ class UpdateImageForm(forms.SelfHandlingForm):
     image_id = forms.CharField(widget=forms.HiddenInput())
     name = forms.CharField(max_length="25", label="Name")
     location = forms.CharField(label="Location")
-    user = forms.CharField(label="User", required=False)
-    password = forms.CharField(label="Password", required=False)
-    kernel = forms.CharField(max_length="25", label="Kernel ID",
-                             required=False)
-    ramdisk = forms.CharField(max_length="25", label="Ramdisk ID",
-                              required=False)
-    architecture = forms.CharField(label="Architecture", required=False)
-    container_format = forms.CharField(label="Container Format",
-                                       required=False)
-    disk_format = forms.CharField(label="Disk Format")
+    user = forms.CharField(label="User")
+    password = forms.CharField(widget=forms.PasswordInput, label="Password")
 
     def handle(self, request, data):
         image_id = data['image_id']
         tenant_id = request.user.tenant_id
         error_retrieving = _('Unable to retreive image info from glance: %s' % image_id)
         error_updating = _('Error updating image with id: %s' % image_id)
+
+        scheme, location = _parse_location(data['location'])
+        auth = ":".join([data['user'] , data['password']])
 
         try:
             image = api.image_get_meta(request, image_id)
@@ -83,21 +78,9 @@ class UpdateImageForm(forms.SelfHandlingForm):
             try:
                 meta = {
                     'is_public': True,
-                    'disk_format': data['disk_format'],
-                    'container_format': data['container_format'],
                     'name': data['name'],
+                    'location' : "%s://%s@%s" % (scheme, auth, location)
                 }
-                # TODO add public flag to properties
-                meta['properties'] = {}
-                if data['kernel']:
-                    meta['properties']['kernel_id'] = data['kernel']
-
-                if data['ramdisk']:
-                    meta['properties']['ramdisk_id'] = data['ramdisk']
-
-                if data['architecture']:
-                    meta['properties']['architecture'] = data['architecture']
-
                 api.image_update(request, image_id, meta)
                 messages.success(request, _('Image was successfully updated.'))
 
@@ -142,6 +125,14 @@ class UploadMetadata(forms.SelfHandlingForm):
         messages.success(request, "Image Metadata was successfully registerd")
         messages.error(request, data)
         return shortcuts.redirect(request.build_absolute_uri())
+
+# utility
+def _parse_location(url):
+    image_loc = urlparse.urlparse(url)
+    location = image_loc.netloc.split('@', 1)[-1]
+    if location.startswith('['):
+       location = location[1:].split(']')[0]
+    return image_loc.scheme, location
 
 
 @login_required
@@ -204,10 +195,8 @@ def download(request, tenant_id, image_id):
         return
 
     response = http.HttpResponse()
-    image_loc = urlparse.urlparse(image.location)
-    location = image_loc.netloc.split('@', 1)[-1]
-    if location.startswith('['):
-       location = location[1:].split(']')[0]
+
+    scheme, location = _parse_location(image.location)
     
     data = """
     <image>
@@ -225,7 +214,7 @@ def download(request, tenant_id, image_id):
           </properties>
       </info>
     </image>
-    """ % (image.name, "%s://%s" % (image_loc.scheme,location), 
+    """ % (image.name, "%s://%s" % (scheme,location), 
            image.disk_format, image.container_format, image.size, 
            image.min_disk, image.min_ram)
 
@@ -261,14 +250,14 @@ def update(request, tenant_id, image_id):
         messages.error(request, "Error retrieving image %s: %s"
                                  % (image_id, e.message))
 
+    scheme, location = _parse_location(image.location)
     form, handled = UpdateImageForm().maybe_handle(request, initial={
                  'image_id': image_id,
                  'name': image.get('name', ''),
-                 'kernel': image['properties'].get('kernel_id', ''),
-                 'ramdisk': image['properties'].get('ramdisk_id', ''),
-                 'architecture': image['properties'].get('architecture', ''),
-                 'container_format': image.get('container_format', ''),
-                 'disk_format': image.get('disk_format', ''), })
+                 'location' : '%s://%s' % ( scheme, location),
+                 'user': request.user.username,
+                 'password' : '',
+                 })
     if handled:
         return handled
 
