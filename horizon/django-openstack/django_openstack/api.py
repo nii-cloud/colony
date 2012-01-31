@@ -416,9 +416,9 @@ def admin_api(request):
 def gakunin_api(request):
     LOG.debug('admin_api connection created using token "%s"'
                     ' and url "%s"' %
-                    (request.user.token, url_for(request, 'compute', True)))
-    return authext.AdminExt(auth_token=request.user.token,
-                                 management_url=url_for(request, 'compute', True))
+                    (settings.KEYSTONE_ADMIN_TOKEN, url_for(request, 'identity', True)))
+    return authext.AdminExt(auth_token=settings.KEYSTONE_ADMIN_TOKEN,
+                                 management_url=url_for(request, 'identity', True))
 
 def extras_api(request):
     LOG.debug('extras_api connection created using token "%s"'
