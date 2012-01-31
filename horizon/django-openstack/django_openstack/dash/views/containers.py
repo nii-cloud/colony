@@ -120,6 +120,7 @@ class ContainerAclRemove(forms.SelfHandlingForm):
 class ContainerAcl(forms.SelfHandlingForm):
     ''' Form that handles Swift Container Acl '''
     container_name = forms.CharField(widget=forms.HiddenInput())
+    acl_type = forms.ChoiceField(choices=((1, 'ReadAcl'),(0,'WriteAcl')), widget=forms.RadioSelect)
     read_acl = forms.CharField(widget=forms.HiddenInput(), required=False)
     write_acl = forms.CharField(widget=forms.HiddenInput(), required=False)
     acl_add = forms.CharField(max_length="255", label="ACL", required=True)
@@ -129,8 +130,8 @@ class ContainerAcl(forms.SelfHandlingForm):
 
     def handle(self, request, data):
         container_name = data['container_name']
-        read_acl = True
-        if read_acl:
+        acl_type = data['acl_type']
+        if acl_type:
            type = 'X-Container-Read'
            acl_value = data['read_acl']
         else:
@@ -203,6 +204,8 @@ class MakePublicContainer(forms.SelfHandlingForm):
         html_listing = data['html_listing']
         use_css_in_listing = data['use_css_in_listing']
         container_name = data['container_name']
+        for name in ['Index', 'Listing', 'Listing-Css', 'Error']:
+           hdrs['X-Container-Meta-Web-' + name] = ''
         if public_html:
            hdrs['X-Container-Meta-Web-Index'] = index_object_name
         if html_listing:

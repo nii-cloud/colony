@@ -162,7 +162,8 @@ class Image(APIDictWrapper):
     """Simple wrapper around glance image dictionary"""
     _attrs = ['checksum', 'container_format', 'created_at', 'deleted',
              'deleted_at', 'disk_format', 'id', 'is_public', 'location',
-             'name', 'properties', 'size', 'status', 'updated_at', 'owner']
+             'name', 'properties', 'size', 'status', 'updated_at', 'owner',
+             'min_disk', 'min_ram']
 
     def __getattr__(self, attrname):
         if attrname == "properties":
@@ -527,6 +528,9 @@ def image_create(request, image_meta, image_file):
 def image_delete(request, image_id):
     return glance_api(request).delete_image(image_id)
 
+
+def image_get_meta(request, image_id):
+    return Image(glance_api(request).get_image_meta(image_id))
 
 def image_get(request, image_id):
     return Image(glance_api(request).get_image(image_id)[0])

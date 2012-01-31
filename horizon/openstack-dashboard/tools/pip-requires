@@ -17,6 +17,7 @@ xattr
 pep8
 pylint
 coverage
+lxml
 
 
 -e git+https://github.com/openstack/glance.git@stable/diablo#egg=glance

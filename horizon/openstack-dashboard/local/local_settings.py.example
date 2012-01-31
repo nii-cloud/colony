@@ -51,6 +51,9 @@ QUANTUM_PORT = '9696'
 QUANTUM_TENANT = '1234'
 QUANTUM_CLIENT_VERSION='0.1'
 
+# 
+GAKUNIN_ENABLED = True
+
 # If you have external monitoring links
 EXTERNAL_MONITORING = [
     ['Nagios','http://foo.com'],

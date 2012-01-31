@@ -136,7 +136,7 @@ def main(argv):
     if os.environ.get('COLONY_INSTALL_HOME', None):
         env=os.environ['COLONY_INSTALL_HOME']
     else:
-        env=VENV
+        env = os.path.join(ROOT, '.installer-venv')
     check_dependencies()
     create_virtualenv(env)
     install_dependencies(env)

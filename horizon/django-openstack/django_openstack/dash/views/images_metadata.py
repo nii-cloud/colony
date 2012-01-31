@@ -25,6 +25,7 @@ Views for managing Nova images.
 import datetime
 import logging
 import re
+import urlparse
 
 from django import http
 from django import template
@@ -38,26 +39,118 @@ from django import shortcuts
 
 from django_openstack import api
 from django_openstack import forms
-from openstackx.api import exceptions as api_exceptions
 from glance.common import exception as glance_exception
+from lxml import etree
 from novaclient import exceptions as novaclient_exceptions
+from openstackx.api import exceptions as api_exceptions
 
 
 LOG = logging.getLogger('django_openstack.dash.views.images_metadata')
 
 
+class UpdateImageForm(forms.SelfHandlingForm):
+    image_id = forms.CharField(widget=forms.HiddenInput())
+    name = forms.CharField(max_length="25", label="Name")
+    location = forms.CharField(label="Location")
+    user = forms.CharField(label="User", required=False)
+    password = forms.CharField(label="Password", required=False)
+    kernel = forms.CharField(max_length="25", label="Kernel ID",
+                             required=False)
+    ramdisk = forms.CharField(max_length="25", label="Ramdisk ID",
+                              required=False)
+    architecture = forms.CharField(label="Architecture", required=False)
+    container_format = forms.CharField(label="Container Format",
+                                       required=False)
+    disk_format = forms.CharField(label="Disk Format")
+
+    def handle(self, request, data):
+        image_id = data['image_id']
+        tenant_id = request.user.tenant_id
+        error_retrieving = _('Unable to retreive image info from glance: %s' % image_id)
+        error_updating = _('Error updating image with id: %s' % image_id)
+
+        try:
+            image = api.image_get_meta(request, image_id)
+            #image = api.image_get(request, image_id)
+        except glance_exception.ClientConnectionError, e:
+            LOG.exception(_('Error connecting to glance'))
+            messages.error(request, error_retrieving)
+        except glance_exception.Error, e:
+            LOG.exception(error_retrieving)
+            messages.error(request, error_retrieving)
+
+        if image.owner == request.user.username:
+            try:
+                meta = {
+                    'is_public': True,
+                    'disk_format': data['disk_format'],
+                    'container_format': data['container_format'],
+                    'name': data['name'],
+                }
+                # TODO add public flag to properties
+                meta['properties'] = {}
+                if data['kernel']:
+                    meta['properties']['kernel_id'] = data['kernel']
+
+                if data['ramdisk']:
+                    meta['properties']['ramdisk_id'] = data['ramdisk']
+
+                if data['architecture']:
+                    meta['properties']['architecture'] = data['architecture']
+
+                api.image_update(request, image_id, meta)
+                messages.success(request, _('Image was successfully updated.'))
+
+            except glance_exception.ClientConnectionError, e:
+                LOG.exception(_('Error connecting to glance'))
+                messages.error(request, error_retrieving)
+            except glance_exception.Error, e:
+                LOG.exception(error_updating)
+                messages.error(request, error_updating)
+            except:
+                LOG.exception(_('Unspecified Exception in image update'))
+                messages.error(request, error_updating)
+            return redirect('dash_metadata_update', tenant_id, image_id)
+        else:
+            messages.info(request, _('Unable to update image. You are not its \
+                                      owner.'))
+            return redirect('dash_metadata_update', tenant_id, image_id)
+
+                                                
 class UploadMetadata(forms.SelfHandlingForm):
-    image_meta_file = forms.FileField(label="Image Metadata File")
+    image_meta_file = forms.FileField(label="Image Metadata File", required=True)
 
     def handle(self, request, data):
         data = self.files['image_meta_file'].read()
+
+        root = etree.XML(data)
+
+        image = {}
+
+        image['name'] = root.findtext("name")
+        image['location'] = root.findtext("location")
+        image['is_public'] = True
+        image['owner'] = request.user.username
+        disk_format = root.findtext("format/disk")
+        container_format = root.findtext("format/container")
+        min_disk = root.findtext("info/min_disk")
+        min_ram = root.findtext("info/min_ram")
+
+
+        api.image_create(request, image, None)
+        
         messages.success(request, "Image Metadata was successfully registerd")
+        messages.error(request, data)
         return shortcuts.redirect(request.build_absolute_uri())
 
 
 @login_required
 def index(request, tenant_id):
     tenant = {}
+
+    form, handled = UploadMetadata.maybe_handle(request)
+    if handled:
+        return handled
 
     try:
         tenant = api.token_get_tenant(request, request.user.tenant_id)
@@ -85,16 +178,17 @@ def index(request, tenant_id):
               if im['container_format'] not in ['aki', 'ari']]
 
     return render_to_response(
-    'django_openstack/dash/images/index.html', {
+    'django_openstack/dash/images_metadata/index.html', {
         'tenant': tenant,
         'images': images,
+        'upload_form' : form,
     }, context_instance=template.RequestContext(request))
 
 @login_required
 def download(request, tenant_id, image_id):
     image = None
     try:
-        image = api.image_get(request, image_id)
+        image = api.image_get_meta(request, image_id)
     except glance_exception.ClientConnectionError, e:
         LOG.exception("Error connecting to glance")
         messages.error(request, "Error connecting to glance: %s" % str(e))
@@ -110,18 +204,41 @@ def download(request, tenant_id, image_id):
         return
 
     response = http.HttpResponse()
+    image_loc = urlparse.urlparse(image.location)
+    location = image_loc.netloc.split('@', 1)[-1]
+    if location.startswith('['):
+       location = location[1:].split(']')[0]
+    
+    data = """
+    <image>
+      <name>%s</name>
+      <location>%s</location>
+      <format>
+        <disk>%s</disk>
+        <container>%s</container>
+      </format>
+      <size>%s</size>
+      <info>
+          <min_disk>%s</min_disk>
+          <min_ram>%s</min_ram>
+          <properties>
+          </properties>
+      </info>
+    </image>
+    """ % (image.name, "%s://%s" % (image_loc.scheme,location), 
+           image.disk_format, image.container_format, image.size, 
+           image.min_disk, image.min_ram)
+
+    print image.properties._attrs
+
     response['Content-Disposition'] = 'attachment; filename=image-%s.xml' % image.name
-    response.write("""
-        <image>
-           <name>%s</name>
-        </image>
-    """)
+    response.write(data)
 
     return response
 
 @login_required
 def upload(request, tenant_id):
-    form, handled = UploadMetadata.may_be_handle(request)
+    form, handled = UploadMetadata.maybe_handle(request)
     if handled:
         return handled
 
@@ -129,3 +246,33 @@ def upload(request, tenant_id):
     'django_openstack/dash/images_metadata/upload.html', {
        'upload_form': form,
     }, context_instance=template.RequestContext(request))
+
+
+@login_required
+def update(request, tenant_id, image_id):
+    try:
+        image = api.image_get_meta(request, image_id)
+    except glance_exception.ClientConnectionError, e:
+        LOG.exception("Error connecting to glance")
+        messages.error(request, "Error connecting to glance: %s"
+                                 % e.message)
+    except glance_exception.Error, e:
+        LOG.exception('Error retrieving image with id "%s"' % image_id)
+        messages.error(request, "Error retrieving image %s: %s"
+                                 % (image_id, e.message))
+
+    form, handled = UpdateImageForm().maybe_handle(request, initial={
+                 'image_id': image_id,
+                 'name': image.get('name', ''),
+                 'kernel': image['properties'].get('kernel_id', ''),
+                 'ramdisk': image['properties'].get('ramdisk_id', ''),
+                 'architecture': image['properties'].get('architecture', ''),
+                 'container_format': image.get('container_format', ''),
+                 'disk_format': image.get('disk_format', ''), })
+    if handled:
+        return handled
+
+    return render_to_response('django_openstack/dash/images_metadata/update.html', {
+        'form': form,
+    }, context_instance=template.RequestContext(request))
+

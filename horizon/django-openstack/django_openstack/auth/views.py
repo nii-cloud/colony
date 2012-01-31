@@ -33,8 +33,8 @@ LOG = logging.getLogger('django_openstack.auth')
 
 
 class Login(forms.SelfHandlingForm):
-    username = forms.CharField(max_length="20", label="User Name")
-    password = forms.CharField(max_length="20", label="Password",
+    username = forms.CharField(max_length="255", label="User Name")
+    password = forms.CharField(max_length="255", label="Password",
                                widget=forms.PasswordInput(render_value=False))
 
     def handle(self, request, data):

@@ -56,7 +56,9 @@ urlpatterns += patterns('django_openstack.dash.views.images',
 )
 
 urlpatterns += patterns('django_openstack.dash.views.images_metadata',
-    url(r'^(?P<tenant_id>[^/]+)/images_metadata/$', 'index', name='dash_images_metadata')
+    url(r'^(?P<tenant_id>[^/]+)/images_metadata/$', 'index', name='dash_images_metadata'),
+    url(IMAGES_METADATA % 'download', 'download', name='dash_metadata_download'),
+    url(IMAGES_METADATA % 'update', 'update', name='dash_metadata_update'),
 )
 
 urlpatterns += patterns('django_openstack.dash.views.keypairs',
