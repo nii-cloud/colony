@@ -52,8 +52,8 @@ class GakuninAuthManager(base.ManagerWithFind):
         params = {"auth": {"tokenByEmail": {"email": email}}}
         return self._create('token_by/email', params, "access")
 
-    def create_token_by_eppi(self, eppn):
-        params = {"auth": {"tokenByEppn": {"eppn": eppn}}
+    def create_token_by_eppn(self, eppn):
+        params = {"auth": {"tokenByEppn": {"eppn": eppn}}}
         return self._create('token_by/eppn', params, "access")
 
 class AdminExt(openstackx.admin.Admin):
