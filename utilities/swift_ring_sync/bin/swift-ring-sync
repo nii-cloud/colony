@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 #
 # Copyright 2011 National Institute of Informatics.
 #
@@ -28,102 +28,115 @@ from swift.common.client import get_auth, Connection, ClientException
 from paste.deploy import appconfig
 from swift_ring_sync.internal_proxy import InternalProxy
 
-def get_rings(preauth_url, identity, password, container, ring_name, ring_dir, ring_backup_dir):
+def get_rings(preauth_url, identity, password, container, 
+              ring_name, ring_dir, ring_backup_dir):
+    """ """
     ring_file = os.path.join(ring_dir, ring_name)
+    local_hash = None
     if os.access(ring_file, os.F_OK):
         fp = open(ring_file)
-        md5sum = hashlib.md5(fp.read()).hexdigest()
+        local_hash = hashlib.md5(fp.read()).hexdigest()
         fp.close()
-    else:
-        md5sum = ''
-
     storage_url, auth_token =  get_auth(preauth_url, identity, password)
-    create_connection = lambda: Connection(preauth_url, identity, password, preauthurl=storage_url, preauthtoken=auth_token)
+    create_connection = lambda: Connection(preauth_url, identity, password,
+                                           preauthurl=storage_url, 
+                                           preauthtoken=auth_token)
     conn = create_connection()
     try:
         conn.head_container(container)
     except ClientException:
         return False, '%s: No such container.' % container
-
     headers, obj_list = conn.get_container(container, prefix=ring_name)
-    if obj_list:
-        for obj in obj_list:
-            if obj['name'] == ring_name:
-                if obj['hash'] == md5sum:
-                    return False, '%s: no need to update.' % ring_name
-                else:
-                    break
-    else:
+    if not obj_list:
         return False, '%s: object missing.' % ring_name
-
-    headers, content = conn.get_object(container, ring_name)
-    result, mesg = update_ring_file(ring_name, ring_dir, ring_backup_dir, content)
-    if result:
-        fp = open(ring_file)
-        md5sum = hashlib.md5(fp.read()).hexdigest()
-        fp.close()
-        if headers['etag'] == md5sum:
-            return True, '%s: update successfully.' % ring_name
-        else:
-            return False, '%s: fail to download.' % ring_name
-    else:
+    for obj in obj_list:
+        if obj['name'] == ring_name and obj['hash'] == local_hash:
+            return False, '%s: no need to update.' % ring_name
+    headers, body_iter = conn.get_object(container, ring_name, 
+                                         resp_chunk_size=65536)
+    result, mesg = update_ring_file(ring_name, ring_dir, 
+                                    ring_backup_dir, body_iter)
+    if not result:
         return False, mesg
+    with open(ring_file) as f:
+        update_hash = hashlib.md5(f.read()).hexdigest()
+    if update_hash == headers['etag']:
+        return True, '%s: update successfully.' % ring_name
+    return False, '%s: fail to download.' % ring_name
 
-def get_rings_with_noauth(internal_proxy, account_id, container, ring_name, ring_dir, ring_backup_dir):
+def get_rings_with_noauth(internal_proxy, account_id, container, 
+                          ring_name, ring_dir, ring_backup_dir):
+    """ """
     ring_file = os.path.join(ring_dir, ring_name)
+    local_hash = None
+    remote_hash = None
     if os.access(ring_file, os.F_OK):
         fp = open(ring_file)
-        md5sum = hashlib.md5(fp.read()).hexdigest()
+        local_hash = hashlib.md5(fp.read()).hexdigest()
         fp.close()
-    else:
-        md5sum = ''
-
-    obj_list = internal_proxy.get_container_list(account_id, container, prefix=ring_name)
-    if obj_list:
-        for obj in obj_list:
-            if obj['name'] == ring_name:
-                if obj['hash'] == md5sum:
-                    return False, '%s: no need to update.' % ring_name
-                else:
-                    break
-    else:
+    obj_list = internal_proxy.get_container_list(account_id, container, 
+                                                 prefix=ring_name)
+    if not obj_list:
         return False, '%s: object missing.' % ring_name
-
-    resp = internal_proxy.get_object(account_id, container, ring_name)
-    result, mesg = update_ring_file(ring_name, ring_dir, ring_backup_dir, resp.body)
-    if result:
-        fp = open(ring_file)
-        md5sum = hashlib.md5(fp.read()).hexdigest()
-        fp.close()
-        if resp.headers['etag'] == md5sum:
-            return True, '%s: update successfully.' % ring_name
-        else:
-            return False, '%s: fail to download.' % ring_name
-    else:
+    for obj in obj_list:
+        if obj['name'] == ring_name:
+            remote_hash = obj['hash']
+            if remote_hash == local_hash:
+                return False, '%s: no need to update.' % ring_name
+    resp, body_iter = internal_proxy.get_object(account_id, 
+                                                container, ring_name)
+    result, mesg = update_ring_file(ring_name, ring_dir, 
+                                    ring_backup_dir, body_iter)
+    if not result:
         return False, mesg
+    with open(ring_file) as f:
+        update_hash = hashlib.md5(f.read()).hexdigest()
+    if update_hash == remote_hash:
+        return True, '%s: update successfully.' % ring_name
+    return False, '%s: fail to download.' % ring_name
 
-def update_ring_file(ring_name, ring_dir, ring_backup_dir, content):
+def update_ring_file(ring_name, ring_dir, ring_backup_dir, 
+                     content_iter):
+    """ """
     ring_file = os.path.join(ring_dir, ring_name)
+    ring_file_tmp = ring_file + '.orig'
+    ring_file_presence = False
     if not os.access(ring_backup_dir, os.F_OK | os.W_OK | os.X_OK):
-        return False, 'rings backeup dir[%s]: missing' % ring_backup_dir
+        return False, 'rings backeup dir[%s]: missing' % \
+            ring_backup_dir
     if os.access(ring_file, os.F_OK | os.W_OK | os.R_OK):
+        ring_file_presence = True
         ring_mtime = os.stat(ring_file).st_mtime        
-        suffix_str = time.strftime('%Y%m%d%H%M%S', time.gmtime(ring_mtime))
-        copy2(ring_file, os.path.join(ring_backup_dir, ring_name + '.' + suffix_str))
-    tmp_ring_file = os.tmpnam()
-    fp = open(tmp_ring_file, 'w')
-    fp.write(content)
-    fp.close()
-    try:
-        os.rename(tmp_ring_file, ring_file)
-    except OSError:
-        return False, 'rename %s to %s: fail.' % (tmp_ring_file, ring_file)
-    else:
-        return True, ''
+        suffix_str = time.strftime('%Y%m%d%H%M%S', 
+                                   time.gmtime(ring_mtime))
+        ring_file_bakup = os.path.join(ring_backup_dir, 
+                                       ring_name + '.' + suffix_str)
+        copy2(ring_file, ring_file_bakup)
+        copy2(ring_file, ring_file_tmp)
+    with open(ring_file, 'w') as f:
+        try:
+            while(True):
+                f.write(content_iter.next())
+        except StopIteration:
+            pass
+        except Exception, e:
+            f.close()
+            if ring_file_presence:
+                copy2(ring_file_tmp, ring_file)
+                os.remove(ring_file_tmp)
+                os.remove(ring_file_bkup)
+            else:
+                os.remove(ring_file)
+            return False, 'Error in writing %s, %s' % \
+                (ring_name. e)
+    if ring_file_presence:
+        os.remove(ring_file_tmp)
+    return True, ''
 
-
-def delete_backup_files_over_max_backup(ring_backup_dir, basename, max_backup):
-    old_ring_files = glob(os.path.join(ring_backup_dir, basename + '.*'))
+def delete_backup_files_over_max_backup(ring_backup_dir, 
+                                        basename, max_backup):
+    old_ring_files = glob(os.path.join(ring_backup_dir, 
+                                       basename + '.*'))
     old_ring_files.sort(None)
     if len(old_ring_files) >= max_backup:
         for r in [old_ring_files.pop(0) for i in range(len(old_ring_files) - max_backup)]:
@@ -139,32 +152,42 @@ def execute_hook_command(variables, status, exec_command):
 if __name__ == '__main__':
     parser = OptionParser("Usage: %prog CONFIG_FILE")
     conf_file, options = parse_options(parser=parser)
-    ring_uploader_conf = utils.readconf(conf_file, 'ring-sync')
+    ring_sync_conf = utils.readconf(conf_file, 'ring-sync')
     
-    container = ring_uploader_conf.get('container_name', 'rings')
-    ring_dir = ring_uploader_conf.get('ring_dir', '/etc/swift')
-    ring_backup_dir = ring_uploader_conf.get('ring_backup_dir', '/etc/swift/backeup')
-    preauth_url = ring_uploader_conf.get('auth_url', '')
-    identity = ring_uploader_conf.get('identity', '')
-    password = ring_uploader_conf.get('password', '')
-    account_id = ring_uploader_conf.get('account_id', '')
-    max_backup = int(ring_uploader_conf.get('max_backup', 12))
+    container = ring_sync_conf.get('container_name',
+                                   'rings')
+    ring_dir = ring_sync_conf.get('ring_dir',
+                                  '/etc/swift')
+    ring_backup_dir = ring_sync_conf.get('ring_backup_dir',
+                                         '/etc/swift/backeup')
+    preauth_url = ring_sync_conf.get('auth_url', '')
+    identity = ring_sync_conf.get('identity', '')
+    password = ring_sync_conf.get('password', '')
+    account_id = ring_sync_conf.get('account_id', '')
+    max_backup = int(ring_sync_conf.get('max_backup', 12))
+    proxy_server_conf = ring_sync_conf.get('proxy_server_conf',
+                                           '/etc/swift/proxy-server.conf')
 
     internal_proxy = None
-    try:
-        int_proxy_conf = appconfig('config:%s' % conf_file, name='proxy-server')
-    except(LookupError):
-        pass
-    else:
-        internal_proxy = InternalProxy(int_proxy_conf)
+    if account_id:
+        try:
+            int_proxy_conf = appconfig('config:%s' % proxy_server_conf, 
+                                       name='proxy-server')
+        except Exception, e:
+            print "Error trying to load config %s: %s" % (proxy_server_conf, e)
+        else:
+            internal_proxy = InternalProxy(int_proxy_conf)
 
     rings = ['account.ring.gz', 'container.ring.gz', 'object.ring.gz']
     
     for ring in rings:
         if internal_proxy and account_id:
-            result, mesg = get_rings_with_noauth(internal_proxy, account_id, container, ring, ring_dir, ring_backup_dir)
+            result, mesg = get_rings_with_noauth(internal_proxy, account_id, 
+                                                 container, ring, 
+                                                 ring_dir, ring_backup_dir)
         elif preauth_url and identity and password:
-            result, mesg = get_rings(preauth_url, identity, password, container, ring, ring_dir, ring_backup_dir)
+            result, mesg = get_rings(preauth_url, identity, password, 
+                                     container, ring, ring_dir, ring_backup_dir)
         else:
             print "No authentication informations, or it doesn't work on an swift server."
             break
