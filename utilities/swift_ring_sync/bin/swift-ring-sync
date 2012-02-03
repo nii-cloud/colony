@@ -99,21 +99,21 @@ def update_ring_file(ring_name, ring_dir, ring_backup_dir,
                      content_iter):
     """ """
     ring_file = os.path.join(ring_dir, ring_name)
-    ring_file_tmp = ring_file + '.orig'
-    ring_file_presence = False
+    ring_file_tmp = '%s-%s-%s.tmp' % \
+        (ring_file, os.getpid(), time.time())
+    ring_file_backup_presence = False
     if not os.access(ring_backup_dir, os.F_OK | os.W_OK | os.X_OK):
         return False, 'rings backeup dir[%s]: missing' % \
             ring_backup_dir
     if os.access(ring_file, os.F_OK | os.W_OK | os.R_OK):
-        ring_file_presence = True
+        ring_file_backup_presence = True
         ring_mtime = os.stat(ring_file).st_mtime        
         suffix_str = time.strftime('%Y%m%d%H%M%S', 
                                    time.gmtime(ring_mtime))
         ring_file_bakup = os.path.join(ring_backup_dir, 
                                        ring_name + '.' + suffix_str)
         copy2(ring_file, ring_file_bakup)
-        copy2(ring_file, ring_file_tmp)
-    with open(ring_file, 'w') as f:
+    with open(ring_file_tmp, 'w') as f:
         try:
             while(True):
                 f.write(content_iter.next())
@@ -121,16 +121,14 @@ def update_ring_file(ring_name, ring_dir, ring_backup_dir,
             pass
         except Exception, e:
             f.close()
-            if ring_file_presence:
-                copy2(ring_file_tmp, ring_file)
-                os.remove(ring_file_tmp)
-                os.remove(ring_file_bkup)
-            else:
-                os.remove(ring_file)
-            return False, 'Error in writing %s, %s' % \
-                (ring_name. e)
-    if ring_file_presence:
-        os.remove(ring_file_tmp)
+            os.remove(ring_file_tmp)
+            if ring_file_backup_presence:
+                os.remove(ring_file_bakup)
+            return False, 'Error in writing %s, %s' % (ring_name. e)
+    try:
+        os.rename(ring_file_tmp, ring_file)
+    except OSError:
+        return False, 'rename %s to %s: fail.' % (ring_file_tmp, ring_file)
     return True, ''
 
 def delete_backup_files_over_max_backup(ring_backup_dir, 
@@ -182,12 +180,21 @@ if __name__ == '__main__':
     
     for ring in rings:
         if internal_proxy and account_id:
-            result, mesg = get_rings_with_noauth(internal_proxy, account_id, 
-                                                 container, ring, 
-                                                 ring_dir, ring_backup_dir)
+            try:
+                result, mesg = get_rings_with_noauth(internal_proxy, account_id,
+                                                     container, ring, 
+                                                     ring_dir, ring_backup_dir)
+            except Exception, e:
+                print 'Error trying get %s: %s' % (ring, e)
+                sys.exit(1)
         elif preauth_url and identity and password:
-            result, mesg = get_rings(preauth_url, identity, password, 
-                                     container, ring, ring_dir, ring_backup_dir)
+            try:
+                result, mesg = get_rings(preauth_url, identity, password, 
+                                         container, ring, ring_dir, 
+                                         ring_backup_dir)
+            except Exception, e:
+                print 'Error trying get %s: %s' % (ring, e)
+                sys.exit(1)
         else:
             print "No authentication informations, or it doesn't work on an swift server."
             break
