@@ -94,7 +94,9 @@ def get_err_response(code):
             (403, 'The calculated request signature does not match '\
             'your provided one'),
         'NoSuchKey':
-            (404, 'The resource you requested does not exist')}
+            (404, 'The resource you requested does not exist'),
+        'TooLarge':
+            (413, 'Request Entity Too Large')}
 
     resp = Response(content_type='text/xml')
     resp.status = error_table[code][0]
@@ -408,6 +410,8 @@ class ObjectController(Controller):
                 return get_err_response('AccessDenied')
             elif status == 404:
                 return get_err_response('InvalidBucketName')
+            elif status == 413:
+                return get_err_response('TooLarge')
             else:
                 return get_err_response('InvalidURI')
 
