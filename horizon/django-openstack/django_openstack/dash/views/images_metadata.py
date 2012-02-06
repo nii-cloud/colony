@@ -81,6 +81,7 @@ class UpdateImageForm(forms.SelfHandlingForm):
                     'name': data['name'],
                     'location' : "%s://%s@%s" % (scheme, auth, location)
                 }
+                messages.success(request, meta)
                 api.image_update(request, image_id, meta)
                 messages.success(request, _('Image was successfully updated.'))
 
@@ -192,34 +193,37 @@ def download(request, tenant_id, image_id):
         messages.error(request, msg)
 
     if not image:
-        return
+        return shortcuts.redirect('dash_images_metadata', tenant_id)
 
-    response = http.HttpResponse()
 
     scheme, location = _parse_location(image.location)
-    
-    data = """
-    <image>
-      <name>%s</name>
-      <location>%s</location>
-      <format>
-        <disk>%s</disk>
-        <container>%s</container>
-      </format>
-      <size>%s</size>
-      <info>
-          <min_disk>%s</min_disk>
-          <min_ram>%s</min_ram>
-          <properties>
-          </properties>
-      </info>
-    </image>
-    """ % (image.name, "%s://%s" % (scheme,location), 
-           image.disk_format, image.container_format, image.size, 
-           image.min_disk, image.min_ram)
 
-    print image.properties._attrs
+    try:    
+        data = """
+        <image>
+          <name>%s</name>
+          <location>%s</location>
+          <format>
+            <disk>%s</disk>
+            <container>%s</container>
+          </format>
+          <size>%s</size>
+          <info>
+              <min_disk>%s</min_disk>
+              <min_ram>%s</min_ram>
+              <properties>
+              </properties>
+          </info>
+        </image>
+        """ % (image.name, "%s://%s" % (scheme,location), 
+               image.disk_format, image.container_format, image.size, 
+               image.min_disk, image.min_ram)
+    except AttributeError as e:
+        messages.error(request, 
+                       'Unable to retrieve image metadata %s' % str(e))
+        return shortcuts.redirect('dash_images_metadata', tenant_id)
 
+    response = http.HttpResponse()
     response['Content-Disposition'] = 'attachment; filename=image-%s.xml' % image.name
     response.write(data)
 
