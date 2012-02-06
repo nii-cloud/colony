@@ -76,10 +76,12 @@ class ContainerMetaRemove(forms.SelfHandlingForm):
         header = data['header_name']
         container_name = data['container_name']
 
-        hdrs = {}
-        hdrs[header] = ''
-
-        api.swift_set_container_info(request, container_name, hdrs)
+        if not header.lower().startswith('x-container-meta'):
+            messages.error(request, "Container metadata must begin with x-container-meta-")
+        else:
+            hdrs = {}
+            hdrs[header] = ''
+            api.swift_set_container_info(request, container_name, hdrs)
 
         return shortcuts.redirect(request.build_absolute_uri())
 
@@ -97,10 +99,12 @@ class ContainerMeta(forms.SelfHandlingForm):
         value = data['header_value']
         container_name = data['container_name']
 
-        hdrs = {}
-        hdrs[header] = value
-
-        api.swift_set_container_info(request, container_name, hdrs)
+        if not header.lower().startswith('x-container-meta'):
+            messages.error(request, "Container metadata must begin with x-container-meta-")
+        else:
+            hdrs = {}
+            hdrs[header] = value
+            api.swift_set_container_info(request, container_name, hdrs)
 
         return shortcuts.redirect(request.build_absolute_uri())
 
