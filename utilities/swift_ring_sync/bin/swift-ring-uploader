@@ -97,9 +97,11 @@ if __name__ == '__main__':
                                        name='proxy-server')
         except Exception, e:
             print "Warning trying to load config %s: %s" % (proxy_server_conf, e)
-            internal_proxy = InternalProxy({})
-        else:
+            int_proxy_conf = {}
+        try:
             internal_proxy = InternalProxy(int_proxy_conf)
+        except Exception, e:
+            print 'Warning internal proxy failed, go to external proxy: %s' % e
 
     rings = ['account.ring.gz', 'container.ring.gz', 'object.ring.gz']
     
