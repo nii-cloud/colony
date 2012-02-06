@@ -127,12 +127,15 @@ class ContainerAclRemove(forms.SelfHandlingForm):
             pass
         # clean and parse acl
         acl = clean_acl(type, acl_value)
-        groups, refs = parse_acl(acl_value)
+        refs, groups = parse_acl(acl)
 
         if header in groups:
             groups.remove(header)
         if header in refs:
             refs.remove(header)
+
+        # re-calcurate referer string
+        refs = map( lambda x: '.r:%s' % x, refs)
 
         # set header
         hdrs = {}
@@ -172,21 +175,14 @@ class ContainerAcl(forms.SelfHandlingForm):
         elif acl_type == "0":
            type = 'X-Container-Write'
            acl_value = data.get('write_acl', '')
-        else:
-           disp_error()
            return
 
 
         # clean and parse acl
-        try:
-            acl = clean_acl(type, data['acl_add'])
-        except KeyError:
-            disp_error()
-            return
-
+        acl = clean_acl(type, data['acl_add'])
         acl_orig = clean_acl(type, acl_value)
-        group_add, ref_add = parse_acl(acl)
-        group_orig, ref_orig = parse_acl(acl_orig)
+        ref_add, group_add = parse_acl(acl)
+        ref_orig, group_orig = parse_acl(acl_orig)
 
         # duplicate check
         acl_result = []
@@ -196,7 +192,7 @@ class ContainerAcl(forms.SelfHandlingForm):
                 acl_result.append(item)
         for item in ref_add:
             if not item in ref_orig:
-                acl_ref_result.append(item)
+                acl_ref_result.append('.r:%s', item)
 
         group_result = group_add + acl_result
         ref_result = acl_ref_result + ref_orig
