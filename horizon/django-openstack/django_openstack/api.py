@@ -47,7 +47,7 @@ except ImportError, e:
 
 try:
     import glance.client
-    import glance.common.exception as glance_exceptions
+    import glance.common.exception as glance_exception
 except ImportError, e:
     settings.IMAGE_METADATA_GLANCE_ENABLED=False
 
