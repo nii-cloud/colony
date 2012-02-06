@@ -49,11 +49,11 @@ def login(request):
     token = None
     # first , try by eppn
     if from_eppn:
-        token = api.token_create_by_eppn(request, eppn)
+        token = api.token_create_by_eppn(request, from_eppn)
 
     # second, try by email
     if not token and from_email:
-        token = api.token_create_by_email(request, email)
+        token = api.token_create_by_email(request, from_email)
 
     def get_first_tenant_for_user():
         tenants = api.tenant_list_for_token(request, token.id)
@@ -79,6 +79,9 @@ def login(request):
 
 
     request.session['admin'] = is_admin(token)
+
+    if not token.user or not token.user.has_key('name'):
+        return shortcuts.redirect('auth_login')
     request.session['serviceCatalog'] = token.serviceCatalog
     request.session['tenant_id'] = tenant.id
     request.session['tenant'] = tenant.name
