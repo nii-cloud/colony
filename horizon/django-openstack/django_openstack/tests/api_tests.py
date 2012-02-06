@@ -22,17 +22,21 @@ import cloudfiles
 import httplib
 import json
 import mox
+import time
 
 from django import http
+from django.core.files import uploadedfile
 from django.conf import settings
 from django_openstack import api
+from django_openstack import authext
 from glance import client as glance_client
-from mox import IsA
+from mox import IsA,IgnoreArg
 from novaclient.v1_1 import client
 from openstack import compute as OSCompute
 from openstackx import admin as OSAdmin
 from openstackx import auth as OSAuth
 from openstackx import extras as OSExtras
+from urllib import quote
 
 
 from django_openstack import test
@@ -768,6 +772,31 @@ class AuthApiTests(test.TestCase):
 
         self.mox.VerifyAll()
 
+    def test_token_create_by_email(self):
+        self.mox.StubOutWithMock(api, 'gakunin_api')
+        gakunin_api = self.mox.CreateMock(authext.GakuninAuthManager)
+        gakunin_api.gakunin = self.mox.CreateMock(authext.GakuninAuthManager)
+        api.gakunin_api(IsA(http.HttpRequest)).AndReturn(gakunin_api)
+
+        gakunin_api.gakunin.create_token_by_email('test@email.com').AndReturn(None)
+       
+        self.mox.ReplayAll()
+
+        ret_val = api.token_create_by_email(self.request, 'test@email.com')
+        self.mox.VerifyAll()
+
+    def test_token_create_by_eppn(self):
+        self.mox.StubOutWithMock(api, 'gakunin_api')
+        gakunin_api = self.mox.CreateMock(authext.GakuninAuthManager)
+        gakunin_api.gakunin = self.mox.CreateMock(authext.GakuninAuthManager)
+        gakunin_api.gakunin.create_token_by_eppn('test@eppn').AndReturn(None)
+        api.gakunin_api(IsA(http.HttpRequest)).AndReturn(gakunin_api)
+
+        self.mox.ReplayAll()
+        
+        ret_val = api.token_create_by_eppn(self.request, 'test@eppn')
+        self.mox.VerifyAll()
+
     def test_token_create(self):
         self.mox.StubOutWithMock(api, 'auth_api')
         auth_api_mock = self.mox.CreateMockAnything()
@@ -1404,6 +1433,7 @@ class SwiftApiTests(test.TestCase):
 
         self.mox.VerifyAll()
 
+ 
     def test_swift_get_objects(self):
         NAME = 'containerName'
 
@@ -1451,10 +1481,69 @@ class SwiftApiTests(test.TestCase):
 
         self.mox.VerifyAll()
 
+    def test_swift_upload_object_with_manifest(self):
+        CONTAINER_NAME = 'containerName'
+        CONTAINER_SEGMENTS_NAME = 'containerName_segments'
+        OBJECT_NAME = 'objectName'
+        OBJECT_DATA = 'someData'
+
+        orig_size_value = settings.SWIFT_LARGE_OBJECT_SIZE
+        orig_segment_value = settings.SWIFT_LARGE_OBJECT_CHUNK_SIZE
+
+        settings.SWIFT_LARGE_OBJECT_SIZE = 5
+        settings.SWIFT_LARGE_OBJECT_CHUNK_SIZE = 1
+
+        swift_api = self.stub_swift_api(2)
+        container = self.mox.CreateMock(cloudfiles.container.Container)
+        container_segments = self.mox.CreateMock(cloudfiles.container.Container)
+        base_object = self.mox.CreateMock(cloudfiles.storage_object.Object)
+
+        swift_objects = []
+        for i in range(10):
+            swift_object = self.mox.CreateMock(cloudfiles.storage_object.Object)
+            swift_objects.append(swift_object)
+        time_m = self.mox.CreateMock(time)
+
+        uploaded_file = self.mox.CreateMock(uploadedfile.UploadedFile)
+        uploaded_file.size = 10
+
+
+        swift_api.create_container(CONTAINER_SEGMENTS_NAME).AndReturn(container_segments)
+        swift_api.get_container(CONTAINER_NAME).AndReturn(container)
+        #time_m.time().AndReturn(1)
+        #swift_object.write(OBJECT_DATA).AndReturn(TEST_RETURN)
+
+        for i in range(10):
+            uploaded_file.chunks(1).AndReturn(str(i))
+            #container_segments.create_object(quote('%s/%d/%d/%08d' % (OBJECT_NAME,
+            #                                1, 1, i),'')).AndReturn(swift_object)
+            container_segments.create_object(IgnoreArg()).AndReturn(swift_objects[i])
+            swift_objects[i].write(str(i))
+        uploaded_file.chunks(1).AndReturn(None)
+        container.create_object(OBJECT_NAME).AndReturn(base_object)
+
+        base_object.sync_manifest()
+
+        self.mox.ReplayAll()
+
+        ret_val = api.swift_upload_object_with_manifest(self.request,
+                                          CONTAINER_NAME,
+                                          OBJECT_NAME,
+                                          uploaded_file)
+
+        settings.SWIFT_LARGE_OBJECT_SIZE = orig_size_value
+        settings.SWIFT_LARGE_OBJECT_CHUNK_SIZE = orig_segment_value
+
+        self.assertIsNone(ret_val)
+
+        self.mox.VerifyAll()
+
     def test_swift_upload_object(self):
         CONTAINER_NAME = 'containerName'
         OBJECT_NAME = 'objectName'
         OBJECT_DATA = 'someData'
+
+
 
         swift_api = self.stub_swift_api()
         container = self.mox.CreateMock(cloudfiles.container.Container)
@@ -1492,6 +1581,98 @@ class SwiftApiTests(test.TestCase):
                                           OBJECT_NAME)
 
         self.assertIsNone(ret_val)
+
+        self.mox.VerifyAll()
+
+    def test_swift_remove_object_info_none(self):
+        CONTAINER_NAME = 'containerName'
+        OBJECT_NAME = 'objectName'
+        OBJECT_DATA = { 'meta' : 'meta' }
+        OBJECT_META = { 'notmetadatakey' : 'meta' }
+
+        swift_api = self.stub_swift_api()
+        container = self.mox.CreateMock(cloudfiles.container.Container)
+        swift_object = self.mox.CreateMock(cloudfiles.storage_object.Object)
+
+        swift_api.get_container(CONTAINER_NAME).AndReturn(container)
+        container.get_object(OBJECT_NAME).AndReturn(swift_object)
+        swift_object.metadata = OBJECT_DATA
+        swift_object.sync_metadata()
+
+        self.mox.ReplayAll()
+
+        api.swift_remove_object_info(self.request,
+                                        CONTAINER_NAME,
+                                        OBJECT_NAME,
+                                        OBJECT_META)
+        self.mox.VerifyAll()
+
+    def test_swift_remove_object_info(self):
+        CONTAINER_NAME = 'containerName'
+        OBJECT_NAME = 'objectName'
+        OBJECT_DATA = { 'meta' : 'meta' }
+        OBJECT_META = { 'meta' : 'meta' }
+
+        swift_api = self.stub_swift_api()
+        container = self.mox.CreateMock(cloudfiles.container.Container)
+        swift_object = self.mox.CreateMock(cloudfiles.storage_object.Object)
+
+        swift_api.get_container(CONTAINER_NAME).AndReturn(container)
+        container.get_object(OBJECT_NAME).AndReturn(swift_object)
+        swift_object.metadata = OBJECT_DATA
+        swift_object.sync_metadata()
+
+        self.mox.ReplayAll()
+
+        api.swift_remove_object_info(self.request,
+                                        CONTAINER_NAME,
+                                        OBJECT_NAME,
+                                        OBJECT_META)
+        self.mox.VerifyAll()
+
+    def test_swift_set_object_info(self):
+        CONTAINER_NAME = 'containerName'
+        OBJECT_NAME = 'objectName'
+        OBJECT_DATA = { 'meta' : 'meta' }
+
+        swift_api = self.stub_swift_api()
+        container = self.mox.CreateMock(cloudfiles.container.Container)
+        swift_object = self.mox.CreateMock(cloudfiles.storage_object.Object)
+
+        swift_api.get_container(CONTAINER_NAME).AndReturn(container)
+        container.get_object(OBJECT_NAME).AndReturn(swift_object)
+        swift_object.metadata = OBJECT_DATA
+        swift_object.sync_metadata()
+
+        self.mox.ReplayAll()
+
+        ret_val = api.swift_set_object_info(self.request,
+                                            CONTAINER_NAME,
+                                            OBJECT_NAME,
+                                            OBJECT_DATA)
+
+        self.mox.VerifyAll()
+
+    def test_swift_get_object_info(self):
+        CONTAINER_NAME = 'containerName'
+        OBJECT_NAME = 'objectName'
+        OBJECT_DATA = { 'meta' : 'meta' }
+
+        swift_api = self.stub_swift_api()
+        container = self.mox.CreateMock(cloudfiles.container.Container)
+        swift_object = self.mox.CreateMock(cloudfiles.storage_object.Object)
+
+        swift_api.get_container(CONTAINER_NAME).AndReturn(container)
+        container.get_object(OBJECT_NAME).AndReturn(swift_object)
+        swift_object.metadata = OBJECT_DATA
+
+        self.mox.ReplayAll()
+
+        ret_val = api.swift_get_object_info(self.request,
+                                            CONTAINER_NAME,
+                                            OBJECT_NAME)
+
+        self.assertEqual(ret_val, OBJECT_DATA)
 
         self.mox.VerifyAll()
 

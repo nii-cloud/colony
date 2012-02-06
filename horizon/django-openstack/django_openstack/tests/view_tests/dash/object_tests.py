@@ -73,8 +73,8 @@ class ObjectViewTests(base.BaseViewTests):
                     'name': OBJECT_NAME,
                     'object_file': OBJECT_FILE}
 
-        self.mox.StubOutWithMock(api, 'swift_upload_object')
-        api.swift_upload_object(IsA(http.HttpRequest),
+        self.mox.StubOutWithMock(api, 'swift_upload_object_with_manifest')
+        api.swift_upload_object_with_manifest(IsA(http.HttpRequest),
                                 unicode(self.CONTAINER_NAME),
                                 unicode(OBJECT_NAME),
                                 OBJECT_DATA)
@@ -229,7 +229,7 @@ class ObjectViewTests(base.BaseViewTests):
         api.swift_set_object_info(IsA(http.HttpRequest),
                                   unicode(self.CONTAINER_NAME),
                                   OBJECT_NAME,
-                                  { 'x-object-meta-hoge' : 'object-meta-value' }
+                                  { 'hoge' : 'object-meta-value' }
                                  )
         self.mox.ReplayAll()
 
@@ -256,7 +256,7 @@ class ObjectViewTests(base.BaseViewTests):
         api.swift_remove_object_info(IsA(http.HttpRequest),
                                   unicode(self.CONTAINER_NAME),
                                   OBJECT_NAME,
-                                  { 'x-object-meta-hoge' : '' }
+                                  { 'hoge' : '' }
                                  )
         self.mox.ReplayAll()
 
