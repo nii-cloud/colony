@@ -106,16 +106,27 @@ if __name__ == '__main__':
         ring_file = os.path.join(ring_dir, ring)
         if os.access(ring_file, os.F_OK):
             if internal_proxy and account_id:
-                result, mesg = put_rings_with_noauth(internal_proxy, 
-                                                     account_id, 
-                                                     container, ring, ring_file)
+                try:
+                    result, mesg = put_rings_with_noauth(internal_proxy, 
+                                                         account_id, 
+                                                         container, ring, 
+                                                         ring_file)
+                except Exception, e:
+                    print 'Error trying get %s: %s' % (ring, e)
+                    sys.exit(1)
             elif preauth_url and identity and password:
-                result, mesg = put_rings(preauth_url, identity, 
-                                         password, container, ring, ring_file)
+                try:
+                    result, mesg = put_rings(preauth_url, identity, 
+                                             password, container, ring, 
+                                             ring_file)
+                except Exception, e:
+                    print 'Error trying get %s: %s' % (ring, e)
+                    sys.exit(1)
             else:
                 print "No authentication informations, or it doesn't work on an swift server."
                 break
             print mesg
         else:
             print '%s: No such file.' % ring_file
+            sys.exit(1)
     sys.exit(0)
