@@ -136,30 +136,3 @@ def parse_acl(acl_string):
             else:
                 groups.append(value)
     return referrers, groups
-
-
-def referrer_allowed(referrer, referrer_acl):
-    """
-    Returns True if the referrer should be allowed based on the referrer_acl
-    list (as returned by :func:`parse_acl`).
-
-    See :func:`clean_acl` for documentation of the standard Swift ACL format.
-
-    :param referrer: The value of the HTTP Referer header.
-    :param referrer_acl: The list of referrer designations as returned by
-                         :func:`parse_acl`.
-    :returns: True if the referrer should be allowed; False if not.
-    """
-    allow = False
-    if referrer_acl:
-        rhost = urlparse(referrer or '').hostname or 'unknown'
-        for mhost in referrer_acl:
-            if mhost[0] == '-':
-                mhost = mhost[1:]
-                if mhost == rhost or \
-                       (mhost[0] == '.' and rhost.endswith(mhost)):
-                    allow = False
-            elif mhost == '*' or mhost == rhost or \
-                    (mhost[0] == '.' and rhost.endswith(mhost)):
-                allow = True
-    return allow
