@@ -175,7 +175,6 @@ class ContainerAcl(forms.SelfHandlingForm):
         elif acl_type == "0":
            type = 'X-Container-Write'
            acl_value = data.get('write_acl', '')
-           return
 
 
         # clean and parse acl
@@ -185,21 +184,30 @@ class ContainerAcl(forms.SelfHandlingForm):
         ref_orig, group_orig = parse_acl(acl_orig)
 
         # duplicate check
+        ref_add = list(set(ref_add))
+        ref_orig = list(set(ref_orig))
+        group_add = list(set(group_add))
+        group_orig = list(set(group_orig))
+
         acl_result = []
         acl_ref_result = []
+
         for item in group_add:
             if not item in group_orig:
                 acl_result.append(item)
         for item in ref_add:
             if not item in ref_orig:
-                acl_ref_result.append('.r:%s', item)
+                acl_ref_result.append(item)
 
-        group_result = group_add + acl_result
+        group_result = group_orig + acl_result
         ref_result = acl_ref_result + ref_orig
+        # re-calcurate referer string
+        refs_result = map( lambda x: '.r:%s' % x, ref_result)
 
         # set header
         hdrs = {}
         hdrs[type] = ','.join(group_result + ref_result)
+
         api.swift_set_container_info(request, container_name, hdrs)
        
         return shortcuts.redirect(request.build_absolute_uri()) 
