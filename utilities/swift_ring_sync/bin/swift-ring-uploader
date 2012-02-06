@@ -96,7 +96,8 @@ if __name__ == '__main__':
             int_proxy_conf = appconfig('config:%s' % proxy_server_conf, 
                                        name='proxy-server')
         except Exception, e:
-            print "Error trying to load config %s: %s" % (proxy_server_conf, e)
+            print "Warning trying to load config %s: %s" % (proxy_server_conf, e)
+            internal_proxy = InternalProxy({})
         else:
             internal_proxy = InternalProxy(int_proxy_conf)
 
