@@ -18,6 +18,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import tempfile
 from django import http
 from django.contrib import messages
 from django.core.urlresolvers import reverse
@@ -93,14 +94,12 @@ class ImageViewTests(base.BaseViewTests):
 
         self.mox.StubOutWithMock(api, 'image_get_meta')
         api.image_get_meta(IsA(http.HttpRequest), IMAGE_ID).AndReturn(image)
-        exception = glance_exception.Error('glanceError')
 
         self.mox.ReplayAll()
 
         res = self.client.post(reverse('dash_metadata_download', args=[self.TEST_TENANT, IMAGE_ID]))
 
         self.assertRedirectsNoFollow(res, reverse('dash_images_metadata', args=[self.TEST_TENANT]))
-
         self.mox.VerifyAll()
 
     def test_metadata_download_noimage(self):
@@ -116,8 +115,30 @@ class ImageViewTests(base.BaseViewTests):
 
         self.mox.VerifyAll()
 
-    def test_metadata_update_post(self):
+    def test_metadata_upload_post(self):
         IMAGE_ID=u'1'
+        METADATA_DATA = """
+<image type="openstack-glance">
+    <name>visibleImage</name>
+    <location>swift://localhost/AUTH_test/Cont</location>
+    <format>
+      <disk />
+      <container />
+    </format>
+    <size>0</size>
+    <info>
+       <min_disk>0</min_disk>
+       <min_ram>1G</min_ram>
+       <properties />
+    </info>
+</image>
+
+"""
+        METADATA_FILE = tempfile.TemporaryFile()
+        METADATA_FILE.write(METADATA_DATA)
+        METADATA_FILE.flush()
+        METADATA_FILE.seek(0)
+        
         image_dict = {'name': 'visibleImage',
                       'container_format': 'novaImage',
                       'location' : 'swift://localhost/',
@@ -127,14 +148,50 @@ class ImageViewTests(base.BaseViewTests):
                       'image.min_disk' : '',
                       'image.min_ram' : ''}
         form_data = {'method' : 'UploadMetadata',
-                      'image_meta_file' : '' }
+                      'image_meta_file' : METADATA_FILE }
 
         image = api.Image(image_dict)
 
         self.visibleImage = api.Image(image_dict)
 
-        self.mox.StubOutWithMock(api, 'image_get_meta')
-        api.image_get_meta(IsA(http.HttpRequest), IMAGE_ID).AndReturn(image)
+        #self.mox.StubOutWithMock(api, 'image_get_meta')
+        #api.image_get_meta(IsA(http.HttpRequest), IMAGE_ID).AndReturn(image)
+        self.mox.StubOutWithMock(api, 'token_get_tenant')
+        api.token_get_tenant(IsA(http.HttpRequest), self.TEST_TENANT)
+        self.mox.StubOutWithMock(api, 'image_list_detailed')
+        api.image_list_detailed(IsA(http.HttpRequest)).AndReturn(self.images)
+        self.mox.StubOutWithMock(api, 'image_create')
+        api.image_create(IsA(http.HttpRequest), image, None)
+
+        self.mox.ReplayAll()
+
+        res = self.client.post(reverse('dash_images_metadata', args=[self.TEST_TENANT]), form_data)
+        self.assertTemplateUsed(res, 'django_openstack/dash/images_metadata/index.html')
+
+        #self.assertIn('images', res.context)
+        #images = res.context['images']
+        #self.assertEqual(len(images), 1)
+        #self.assertEqual(images[0].name, 'visibleImage')
+
+        self.mox.VerifyAll()
+
+    def test_metadata_upload_post_invalid(self):
+        IMAGE_ID=u'1'
+        METADATA_DATA = 'objectData'
+        METADATA_FILE = tempfile.TemporaryFile()
+        METADATA_FILE.write(METADATA_DATA)
+        METADATA_FILE.flush()
+        METADATA_FILE.seek(0)
+        
+        form_data = {'method' : 'UploadMetadata',
+                      'image_meta_file' : METADATA_FILE }
+
+        self.mox.StubOutWithMock(messages, 'error')
+        messages.error(IsA(http.HttpRequest), IgnoreArg())
+        self.mox.StubOutWithMock(api, 'token_get_tenant')
+        api.token_get_tenant(IsA(http.HttpRequest), self.TEST_TENANT)
+        self.mox.StubOutWithMock(api, 'image_list_detailed')
+        api.image_list_detailed(IsA(http.HttpRequest)).AndReturn(self.images)
 
         self.mox.ReplayAll()
 
@@ -147,6 +204,40 @@ class ImageViewTests(base.BaseViewTests):
 
         self.mox.VerifyAll()
 
+    def test_metadata_update_post(self):
+        IMAGE_ID=u'1'
+        image_dict = {'name': 'visibleImage',
+                      'container_format': 'novaImage',
+                      'location' : 'swift://localhost/',
+                      'container_format' : '',
+                      'disk_format' : '',
+                      'image.size' : '',
+                      'image.min_disk' : '',
+                      'image.min_ram' : ''}
+        image = api.Image(image_dict)
+        form_data = {'method' : 'UpdateImageForm',
+                     'name' : 'visibleImage',
+                     'image_id' : IMAGE_ID,
+                     'user' : 'user',
+                     'password' : 'password' }
+
+        self.visibleImage = api.Image(image_dict)
+
+        self.mox.StubOutWithMock(api, 'image_get_meta')
+        api.image_get_meta(IsA(http.HttpRequest), IMAGE_ID).AndReturn(image)
+
+        self.mox.ReplayAll()
+
+        res = self.client.post(reverse('dash_metadata_update', args=[self.TEST_TENANT, IMAGE_ID]), form_data)
+
+
+        #self.assertIn('images', res.context)
+        #images = res.context['images']
+        #self.assertEqual(len(images), 1)
+        #self.assertEqual(images[0].name, 'visibleImage')
+
+        self.mox.VerifyAll()
+    
     def test_metadata_update(self):
         IMAGE_ID=u'1'
         image_dict = {'name': 'visibleImage',
@@ -183,7 +274,7 @@ class ImageViewTests(base.BaseViewTests):
                       'location' : 'swift://localhost/',
                       'container_format' : '',
                       'disk_format' : '',
-                      'image.size' : '',
+                      'size' : '',
                       'image.min_disk' : '',
                       'image.min_ram' : ''}
         image = api.Image(image_dict)
@@ -195,7 +286,7 @@ class ImageViewTests(base.BaseViewTests):
 
         self.mox.ReplayAll()
 
-        res = self.client.post(reverse('dash_metadata_download', args=[self.TEST_TENANT, IMAGE_ID]))
+        res = self.client.get(reverse('dash_metadata_download', args=[self.TEST_TENANT, IMAGE_ID]))
 
 
         #self.assertIn('images', res.context)

@@ -25,6 +25,7 @@ from django_openstack import api
 from django_openstack.tests.view_tests import base
 from django_openstack import authext
 from openstackx.api import exceptions as api_exceptions
+from django_openstack.middleware import keystone
 from mox import IsA
 
 
@@ -107,7 +108,7 @@ class AuthViewTests(base.BaseViewTests):
 
         aToken = self.mox.CreateMock(api.Token)
         aToken.id = TOKEN_ID
-        aToken.user = { 'roles': [{'name': 'admin'}]}
+        aToken.user = { 'roles': [{'name': 'admin'}], 'name' : 'test'}
         aToken.serviceCatalog = {}
         self.mox.StubOutWithMock(api, 'token_create_by_email')
         api.token_create_by_email(IsA(http.HttpRequest), 'test@test.com').AndReturn(aToken)
@@ -185,6 +186,26 @@ class AuthViewTests(base.BaseViewTests):
         #self.assertRedirectsNoFollow(res, reverse('auth_login'))
         self.mox.VerifyAll()
         self.mox.UnsetStubs()
+
+    def test_gakunin_login_with_user(self):
+
+        TENANT_ID = 1
+        self.setActiveUser(self.TEST_TOKEN, self.TEST_USER, self.TEST_TENANT,
+                           False, self.TEST_SERVICE_CATALOG)
+        #self.setActiveUser(username='test', tenant_id=TENANT_ID)
+        res = self.client.get(reverse('gakunin_login'))
+
+        self.assertRedirectsNoFollow(res, reverse('dash_containers', args=[TENANT_ID]))
+
+    def test_gakunin_login_with_user_admin(self):
+
+        TENANT_ID = 1
+        self.setActiveUser(self.TEST_TOKEN, self.TEST_USER, self.TEST_TENANT,
+                           True, self.TEST_SERVICE_CATALOG)
+        #self.setActiveUser(username='test', tenant_id=TENANT_ID)
+        res = self.client.get(reverse('gakunin_login'))
+
+        self.assertRedirectsNoFollow(res, reverse('syspanel_overview'))
 
     def test_login(self):
         NEW_TENANT_ID = '6'
