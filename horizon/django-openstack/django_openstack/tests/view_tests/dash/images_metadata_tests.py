@@ -26,6 +26,7 @@ from django_openstack import api
 from django_openstack.tests.view_tests import base
 from glance.common import exception as glance_exception
 from openstackx.api import exceptions as api_exceptions
+#from django_openstack.dash.views.images_metadata import _parse_location
 from mox import IgnoreArg, IsA
 
 
@@ -205,6 +206,7 @@ class ImageViewTests(base.BaseViewTests):
         self.mox.VerifyAll()
 
     def test_metadata_update_post(self):
+        self.setActiveUser(self.TEST_TOKEN, self.TEST_USER, self.TEST_TENANT)
         IMAGE_ID=u'1'
         image_dict = {'name': 'visibleImage',
                       'container_format': 'novaImage',
@@ -218,6 +220,7 @@ class ImageViewTests(base.BaseViewTests):
         form_data = {'method' : 'UpdateImageForm',
                      'name' : 'visibleImage',
                      'image_id' : IMAGE_ID,
+                     'location' : 'swift://localhost/',
                      'user' : 'user',
                      'password' : 'password' }
 
