@@ -91,13 +91,13 @@ class AuthViewTests(base.BaseViewTests):
 
     def test_gakunin_login(self):
         res = self.client.get(reverse('gakunin_login'))
-        self.assertRedirectsNoFollow(res, reverse('auth_login'))
+        self.assertEqual(res._headers['location'], ('Location', 'http://testserver/auth/login/'))
 
     def test_gakunin_login_https(self):
         key = {}
         key['wsgi.url_scheme'] =  'https'
         res = self.client.get(reverse('gakunin_login'),  **key )
-        self.assertRedirectsNoFollow(res, reverse('auth_login'))
+        self.assertEqual(res._headers['location'], ('Location', 'https://testserver:80/auth/login/'))
 
     def test_gakunin_login_with_no_tenants(self):
         TOKEN_ID = 1
@@ -119,7 +119,8 @@ class AuthViewTests(base.BaseViewTests):
 
         self.mox.ReplayAll()
         res = self.client.get(reverse('gakunin_login'),  **key )
-        self.assertRedirectsNoFollow(res, reverse('auth_login'))
+        self.assertEqual(res._headers['location'], ('Location', 'https://testserver:80/auth/login/'))
+        #self.assertRedirectsNoFollow(res, reverse('auth_login'))
         self.mox.VerifyAll()
         self.mox.UnsetStubs()
 
@@ -130,6 +131,7 @@ class AuthViewTests(base.BaseViewTests):
         key = {}
         key['wsgi.url_scheme'] =  'https'
         key['email'] = 'test@test.com'
+        key['port'] = 443
 
         aToken = self.mox.CreateMock(api.Token)
         aToken.id = TOKEN_ID
@@ -148,7 +150,8 @@ class AuthViewTests(base.BaseViewTests):
 
         self.mox.ReplayAll()
         res = self.client.get(reverse('gakunin_login'),  **key )
-        self.assertRedirectsNoFollow(res, reverse('auth_login'))
+        self.assertEqual(res._headers['location'], ('Location', 'https://testserver:80/auth/login/'))
+        #self.assertRedirectsNoFollow(res, reverse('auth_login'))
         self.mox.VerifyAll()
         self.mox.UnsetStubs()
 
@@ -177,7 +180,9 @@ class AuthViewTests(base.BaseViewTests):
 
         self.mox.ReplayAll()
         res = self.client.get(reverse('gakunin_login'),  **key )
-        self.assertRedirectsNoFollow(res, reverse('auth_login'))
+        self.assertEqual(res._headers['location'], ('Location', 'https://testserver:80/auth/login/'))
+        #self.assertEqual(res._headers['location'], ('Location', 'https://testserver', 'auth/login'))
+        #self.assertRedirectsNoFollow(res, reverse('auth_login'))
         self.mox.VerifyAll()
         self.mox.UnsetStubs()
 
@@ -215,7 +220,8 @@ class AuthViewTests(base.BaseViewTests):
 
         self.mox.ReplayAll()
         res = self.client.get(reverse('gakunin_login'),  **key )
-        self.assertRedirectsNoFollow(res, reverse('auth_login'))
+        self.assertEqual(res._headers['location'], ('Location', 'https://testserver:80/auth/login/'))
+        #self.assertRedirectsNoFollow(res, reverse('auth_login'))
         self.mox.VerifyAll()
         self.mox.UnsetStubs()
 

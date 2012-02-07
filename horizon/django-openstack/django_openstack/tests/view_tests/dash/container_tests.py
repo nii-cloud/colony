@@ -195,6 +195,21 @@ class ContainerViewTests(base.BaseViewTests):
         self.mox.VerifyAll()
         self.mox.UnsetStubs()
 
+    def test_container_meta_remove_invalid(self):
+        formData = {'container_name' : 'containerName',
+                    'method' : 'ContainerMetaRemove',
+                    'header_name' : 'x-invalid-meta-test' }
+
+        self.mox.StubOutWithMock(messages, 'error')
+        self.mox.StubOutWithMock(api, 'swift_set_container_info')
+        messages.error(IsA(http.HttpRequest), IgnoreArg())
+        self.mox.ReplayAll()
+        res = self.client.post(reverse('dash_containers_meta',
+                                       args=[self.request.user.tenant_id, self.container.name]),
+                                       formData) 
+        self.mox.VerifyAll()
+        self.mox.UnsetStubs()
+
     def test_container_meta_remove(self):
         formData = {'container_name' : 'containerName',
                     'method' : 'ContainerMetaRemove',
@@ -219,6 +234,23 @@ class ContainerViewTests(base.BaseViewTests):
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
         api.swift_set_container_info(
                     IsA(http.HttpRequest), self.container.name, {'x-container-meta-test':postvalue})
+        self.mox.ReplayAll()
+        res = self.client.post(reverse('dash_containers_meta',
+                                       args=[self.request.user.tenant_id, self.container.name]),
+                                       formData) 
+        self.assertRedirectsNoFollow(res, reverse('dash_containers_meta',
+                                                  args=[self.request.user.tenant_id, self.container.name]))
+        self.mox.VerifyAll()
+        self.mox.UnsetStubs()
+
+    def test_container_meta_put_invalid(self):
+        formData = {'container_name' : 'containerName',
+                    'method' : 'ContainerMeta',
+                    'header_name' : 'x-invalid-meta-test',
+                    'header_value' : 'hoge' }
+        self.mox.StubOutWithMock(messages, 'error')
+        self.mox.StubOutWithMock(api, 'swift_set_container_info')
+        messages.error(IsA(http.HttpRequest), IgnoreArg())
         self.mox.ReplayAll()
         res = self.client.post(reverse('dash_containers_meta',
                                        args=[self.request.user.tenant_id, self.container.name]),
@@ -301,6 +333,27 @@ class ContainerViewTests(base.BaseViewTests):
         self.mox.VerifyAll()
         self.mox.UnsetStubs()
 
+    def test_container_acl_put_read_invalud_acl_type(self):
+        formData = {'container_name' : 'containerName',
+                    'method' : 'ContainerAcl',
+                    'acl_add' : '.r:-',
+                    'acl_type' : "1",
+                    'read_acl' : ''}
+        self.mox.StubOutWithMock(api, 'swift_get_container')
+        ret_container = self.container
+        ret_container.headers = [('x-container-read','test'), ('x-container-write', 'fuga') ]
+        api.swift_get_container(
+                IsA(http.HttpRequest), self.container.name).AndReturn(ret_container)
+
+
+        self.mox.ReplayAll()
+        res = self.client.post(reverse('dash_containers_acl',
+                                       args=[self.request.user.tenant_id, self.container.name]),
+                                       formData)
+        self.assertTemplateUsed(res, 'django_openstack/dash/containers/acl.html')
+        self.mox.VerifyAll()
+        self.mox.UnsetStubs()
+
     def test_container_acl_put_write(self):
         formData = {'container_name' : 'containerName',
                     'method' : 'ContainerAcl',
@@ -346,6 +399,24 @@ class ContainerViewTests(base.BaseViewTests):
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
         api.swift_set_container_info(
                     IsA(http.HttpRequest), self.container.name, {'X-Container-Read' : 'test'})
+        self.mox.ReplayAll()
+        res = self.client.post(reverse('dash_containers_acl',
+                                       args=[self.request.user.tenant_id, self.container.name]),
+                                       formData) 
+        self.assertRedirectsNoFollow(res, reverse('dash_containers_acl',
+                                                  args=[self.request.user.tenant_id, self.container.name]))
+        self.mox.VerifyAll()
+        self.mox.UnsetStubs()
+
+    def test_contianer_acl_put_read_ref(self):
+        formData = {'container_name' : 'containerName',
+                    'method' : 'ContainerAcl',
+                    'acl_add' : '.r:*',
+                    'acl_type' : "1",
+                    'read_acl' : ''}
+        self.mox.StubOutWithMock(api, 'swift_set_container_info')
+        api.swift_set_container_info(
+                    IsA(http.HttpRequest), self.container.name, {'X-Container-Read' : '.r:*'})
         self.mox.ReplayAll()
         res = self.client.post(reverse('dash_containers_acl',
                                        args=[self.request.user.tenant_id, self.container.name]),
@@ -413,12 +484,36 @@ class ContainerViewTests(base.BaseViewTests):
         self.mox.VerifyAll()
         self.mox.UnsetStubs()
 
+    def test_container_acl_remove_read_ref_invalid(self):
+        ret_container = self.container
+        ret_container.headers = [('x-container-read','test'), ('x-container-write', 'fuga') ]
+        formData = {'container_name' : 'containerName',
+                    'method' : 'ContainerAclRemove',
+                    'header_name' : '*',
+                    'acl_type' : 'read',
+                    'acl_value' : 'test, .r:-'}
+        self.mox.StubOutWithMock(messages, 'error')
+        messages.error(IgnoreArg(), IsA(str))
+        self.mox.StubOutWithMock(api, 'swift_get_container')
+        api.swift_get_container(
+                                IsA(http.HttpRequest), self.container.name
+                                ).AndReturn(ret_container)
+       
+        self.mox.ReplayAll()
+ 
+        res = self.client.post(reverse('dash_containers_acl',
+                                       args=[self.request.user.tenant_id, self.container.name]),
+                                       formData, follow=False) 
+        self.assertTemplateUsed(res, 'django_openstack/dash/containers/acl.html')
+        self.mox.VerifyAll()
+        self.mox.UnsetStubs()
+
     def test_container_acl_remove_read_ref(self):
         formData = {'container_name' : 'containerName',
                     'method' : 'ContainerAclRemove',
-                    'header_name' : 'r:*',
+                    'header_name' : '*',
                     'acl_type' : 'read',
-                    'acl_value' : 'test, r:*'}
+                    'acl_value' : 'test, .r:*'}
         self.mox.StubOutWithMock(api, 'swift_set_container_info')
         api.swift_set_container_info(
                     IsA(http.HttpRequest), self.container.name, {'X-Container-Read':'test'})
