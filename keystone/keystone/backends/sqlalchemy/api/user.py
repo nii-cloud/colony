@@ -51,6 +51,11 @@ class UserAPI(BaseUserAPI):
             session = get_session()
         return session.query(models.User).filter_by(email=email).first()
 
+    def get_by_eppn(self, eppn, session=None):
+        if not session:
+            session = get_session()
+        return session.query(models.User).filter_by(eppn=eppn).first()
+
     def get_page(self, marker, limit, session=None):
         if not session:
             session = get_session()
@@ -247,12 +252,7 @@ class UserAPI(BaseUserAPI):
                          order_by(user.id).\
                          limit(limit).\
                          all()
-        '''
-        user_ids = set([str(assoc.user_id) for assoc in users])
-        users = session.query(models.User).\
-                      filter("id in ('%s')" % "','".join(user_ids)).\
-                      all()
-        '''
+
         for usr in users:
             usr.tenant_roles = set()
             for role in usr.roles:

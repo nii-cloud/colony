@@ -19,6 +19,7 @@ class UserAPI(BaseLdapAPI, BaseUserAPI):
     attribute_mapping = {
         'password': 'userPassword',
         'email': 'mail',
+        'eppn': 'eppn',
         'enabled': 'keystoneEnabled',
         'name': 'keystoneName'
     }
@@ -83,6 +84,14 @@ class UserAPI(BaseLdapAPI, BaseUserAPI):
     def get_by_email(self, email):
         users = self.get_all('(mail=%s)' % \
                             (ldap.filter.escape_filter_chars(email),))
+        try:
+            return users[0]
+        except IndexError:
+            return None
+
+    def get_by_eppn(self, eppn):
+        users = self.get_all('(eppn=%s)' % \
+                            (ldap.filter.escape_filter_chars(eppn),))
         try:
             return users[0]
         except IndexError:
