@@ -27,6 +27,7 @@ from django import template
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django import shortcuts
+from django.core import validators
 
 from django_openstack import api
 from django_openstack import forms
@@ -58,7 +59,8 @@ class DeleteContainer(forms.SelfHandlingForm):
 
 
 class CreateContainer(forms.SelfHandlingForm):
-    name = forms.CharField(max_length="255", label="Container Name")
+    name = forms.CharField(max_length="255", label="Container Name",
+           validators=[validators.MaxLengthValidator(255)])
 
     def handle(self, request, data):
         api.swift_create_container(request, data['name'])
@@ -88,8 +90,10 @@ class ContainerMetaRemove(forms.SelfHandlingForm):
 class ContainerMeta(forms.SelfHandlingForm):
     ''' Form that handles Swift Container Meta Data '''
     container_name = forms.CharField(widget=forms.HiddenInput())
-    header_name = forms.CharField(max_length="128", label='Name', required=True)
-    header_value = forms.CharField(max_length="256", label="Value", required=True)
+    header_name = forms.CharField(max_length="128", label='Name', required=True,
+                  validators=[validators.MaxLengthValidator(128)])
+    header_value = forms.CharField(max_length="256", label="Value", required=True,
+                  validators=[validators.MaxLengthValidator(256)])
     
     def __init__(self, *args, **kwargs):
         super(ContainerMeta, self).__init__(*args, **kwargs)
@@ -130,8 +134,12 @@ class ContainerAclRemove(forms.SelfHandlingForm):
         else:
             pass
         # clean and parse acl
-        acl = clean_acl(type, acl_value)
-        refs, groups = parse_acl(acl)
+        try:
+            acl = clean_acl(type, acl_value)
+            refs, groups = parse_acl(acl)
+        except ValueError, e:
+            messages.error(request, 'ACL value is invalid %s' % str(e))
+            return
 
         if header in groups:
             groups.remove(header)
@@ -163,15 +171,8 @@ class ContainerAcl(forms.SelfHandlingForm):
     def handle(self, request, data):
 
 
-        def disp_error():
-            messages.error(request, "Invalid Argument")
-
-        try:
-            container_name = data['container_name']
-            acl_type = data['acl_type']
-        except KeyError:
-            disp_error()
-            return
+        container_name = data['container_name']
+        acl_type = data['acl_type']
 
         if acl_type == "1":
            type = 'X-Container-Read'
@@ -182,10 +183,15 @@ class ContainerAcl(forms.SelfHandlingForm):
 
 
         # clean and parse acl
-        acl = clean_acl(type, data['acl_add'])
-        acl_orig = clean_acl(type, acl_value)
-        ref_add, group_add = parse_acl(acl)
-        ref_orig, group_orig = parse_acl(acl_orig)
+        try:
+            acl = clean_acl(type, data['acl_add'])
+            acl_orig = clean_acl(type, acl_value)
+            ref_add, group_add = parse_acl(acl)
+            ref_orig, group_orig = parse_acl(acl_orig)
+        except ValueError, e:
+            messages.error(request, 'ACL value is invalid %s' % str(e))
+            print str(e)
+            return
 
         # duplicate check
         ref_add = list(set(ref_add))
