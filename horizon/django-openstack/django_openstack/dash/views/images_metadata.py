@@ -107,7 +107,11 @@ class UploadMetadata(forms.SelfHandlingForm):
     def handle(self, request, data):
         data = self.files['image_meta_file'].read()
 
-        root = etree.XML(data)
+        try:
+            root = etree.XML(data)
+        except etree.XMLSyntaxError, e:
+            messages.error(request, 'Metadata content is invalid')
+            return
 
         image = {}
 
@@ -200,7 +204,7 @@ def download(request, tenant_id, image_id):
 
     try:    
         data = """
-        <image>
+        <image type="openstack-glance">
           <name>%s</name>
           <location>%s</location>
           <format>
@@ -230,18 +234,6 @@ def download(request, tenant_id, image_id):
     return response
 
 @login_required
-def upload(request, tenant_id):
-    form, handled = UploadMetadata.maybe_handle(request)
-    if handled:
-        return handled
-
-    return render_to_response(
-    'django_openstack/dash/images_metadata/upload.html', {
-       'upload_form': form,
-    }, context_instance=template.RequestContext(request))
-
-
-@login_required
 def update(request, tenant_id, image_id):
     try:
         image = api.image_get_meta(request, image_id)
@@ -255,7 +247,7 @@ def update(request, tenant_id, image_id):
                                  % (image_id, e.message))
 
     scheme, location = _parse_location(image.location)
-    form, handled = UpdateImageForm().maybe_handle(request, initial={
+    form, handled = UpdateImageForm.maybe_handle(request, initial={
                  'image_id': image_id,
                  'name': image.get('name', ''),
                  'location' : '%s://%s' % ( scheme, location),
