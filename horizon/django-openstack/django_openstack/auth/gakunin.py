@@ -34,10 +34,7 @@ LOG = logging.getLogger('django_openstack.auth.gakunin')
 
 def login(request):
     if request.user and request.user.is_authenticated():
-        if request.user.is_admin():
-            return shortcuts.redirect('syspanel_overview')
-        else:
-            return shortcuts.redirect('dash_containers', request.user.tenant_id)
+        return shortcuts.redirect('dash_containers', request.user.tenant_id)
 
     # check ssl
     if not request.is_secure():
