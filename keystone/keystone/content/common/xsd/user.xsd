@@ -70,6 +70,7 @@
             </annotation>
         </attribute>
         <attribute name="email" type="xsd:string" use="optional"/>
+        <attribute name="eppn" type="xsd:string" use="optional"/>
         <attribute name="enabled" type="xsd:boolean" default="true" use="optional">            
             <annotation>
                 <xsd:documentation

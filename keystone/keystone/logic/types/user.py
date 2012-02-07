@@ -23,12 +23,13 @@ class User(object):
     """Document me!"""
 
     def __init__(self, password=None, id=None, name=None, tenant_id=None,
-            email=None, enabled=None, tenant_roles=None):
+            email=None, eppn=None, enabled=None, tenant_roles=None):
         self.id = id
         self.name = name
         self.tenant_id = tenant_id
         self.password = password
         self.email = email
+        self.eppn = eppn
         self.enabled = enabled and True or False
         self.tenant_roles = tenant_roles
 
@@ -44,6 +45,7 @@ class User(object):
             name = root.get("name")
             tenant_id = root.get("tenantId")
             email = root.get("email")
+            eppn = root.get("eppn")
             password = root.get("password")
             enabled = root.get("enabled")
             if not name:
@@ -54,7 +56,7 @@ class User(object):
                 raise fault.BadRequestFault("Expecting User email")
             enabled = enabled is None or enabled.lower() in ["true", "yes"]
 
-            return User(password, id, name, tenant_id, email, enabled)
+            return User(password, id, name, tenant_id, email, eppn, enabled)
         except etree.LxmlError as e:
             raise fault.BadRequestFault("Cannot parse User", str(e))
 
@@ -85,13 +87,17 @@ class User(object):
             if "email" not in user:
                 raise fault.BadRequestFault("Expecting User Email")
             email = user["email"]
+            if "eppn" in user:
+                eppn = user["eppn"]
+            else:
+                eppn = None
             if "enabled" in user:
                 set_enabled = user["enabled"]
                 if not isinstance(set_enabled, bool):
                     raise fault.BadRequestFault("Bad enabled attribute!")
             else:
                 set_enabled = True
-            return User(password, id, name, tenant_id, email, set_enabled)
+            return User(password, id, name, tenant_id, email, eppn, set_enabled)
         except (ValueError, TypeError) as e:
             raise fault.BadRequestFault("Cannot parse Tenant", str(e))
 
@@ -100,6 +106,8 @@ class User(object):
                         xmlns="http://docs.openstack.org/identity/api/v2.0")
         if self.email:
             dom.set("email", unicode(self.email))
+        if self.eppn:
+            dom.set("eppn", unicode(self.eppn))
         if self.tenant_id:
             dom.set("tenantId", unicode(self.tenant_id))
         if self.id:
@@ -134,6 +142,7 @@ class User(object):
         if self.password:
             user["password"] = unicode(self.password)
         user["email"] = unicode(self.email)
+        user["eppn"] = unicode(self.eppn)
         user["enabled"] = self.enabled
         if self.tenant_roles:
             user["tenantRoles"] = list(self.tenant_roles)
@@ -147,12 +156,13 @@ class User_Update(object):
     """Document me!"""
 
     def __init__(self, password=None, id=None, name=None, tenant_id=None,
-            email=None, enabled=None):
+            email=None, eppn=None, enabled=None):
         self.id = id
         self.name = name
         self.tenant_id = tenant_id
         self.password = password
         self.email = email
+        self.eppn = eppn 
         self.enabled = bool(enabled) if enabled is not None else None
 
     @staticmethod
@@ -168,6 +178,7 @@ class User_Update(object):
             name = root.get("name")
             tenant_id = root.get("tenantId")
             email = root.get("email")
+            eppn = root.get("eppn")
             password = root.get("password")
             enabled = root.get("enabled")
             if enabled == None or enabled == "true" or enabled == "yes":
@@ -182,7 +193,7 @@ class User_Update(object):
                 password = id
 
             return User(password=password, id=id, name=name,
-                tenant_id=tenant_id, email=email, enabled=set_enabled)
+                tenant_id=tenant_id, email=email, eppn=eppn, enabled=set_enabled)
         except etree.LxmlError as e:
             raise fault.BadRequestFault("Cannot parse User", str(e))
 
@@ -198,6 +209,7 @@ class User_Update(object):
             password = user.get('password', None)
             tenant_id = user.get('tenantId', None)
             email = user.get('email', None)
+            eppn = user.get('eppn', None)
             enabled = user.get('enabled', True)
 
             if not isinstance(enabled, bool):
@@ -207,7 +219,7 @@ class User_Update(object):
             if password == '':
                 password = id
 
-            return User(password, id, name, tenant_id, email, enabled)
+            return User(password, id, name, tenant_id, email, eppn, enabled)
         except (ValueError, TypeError) as e:
             raise fault.BadRequestFault("Cannot parse Tenant", str(e))
 
@@ -216,6 +228,8 @@ class User_Update(object):
                         xmlns="http://docs.openstack.org/identity/api/v2.0")
         if self.email:
             dom.set("email", unicode(self.email))
+        if self.eppn:
+            dom.set("eppn", unicode(self.eppn))
         if self.tenant_id:
             dom.set("tenantId", unicode(self.tenant_id))
         if self.id:
@@ -244,6 +258,8 @@ class User_Update(object):
             user["password"] = unicode(self.password)
         if self.email:
             user["email"] = unicode(self.email)
+        if self.eppn:
+            user["eppn"] = unicode(self.eppn)
         if self.enabled is not None:
             user["enabled"] = self.enabled
         return {'user': user}

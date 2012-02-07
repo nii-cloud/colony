@@ -479,7 +479,10 @@ unique_str = lambda: str(uuid.uuid4())
 # Generates and return a unique email
 unique_email = lambda: str(unique_str() + '@openstack.org')
 
-# Generates and return a unique email
+# Generates and return a unique eppn
+unique_eppn = lambda: str(unique_str() + '@openstack.org')
+
+# Generates and return a unique url
 unique_url = lambda: str('http://' + unique_str())
 
 # Automatically populates optional string fields
@@ -487,6 +490,9 @@ optional_str = lambda x: x if x is not None else unique_str()
 
 # Automatically populates optional email fields
 optional_email = lambda x: x if x is not None else unique_email()
+
+# Automatically populates optional email fields
+optional_eppn = lambda x: x if x is not None else unique_eppn()
 
 # Automatically populates optional url fields
 optional_url = lambda x: x if x is not None else unique_url()
@@ -591,11 +597,12 @@ class FunctionalTestCase(ApiTestCase):
         tenant_id = optional_str(tenant_id)
         return self.delete_tenant(tenant_id, **kwargs)
 
-    def create_user(self, user_name=None, user_password=None, user_email=None,
+    def create_user(self, user_name=None, user_password=None, user_email=None, user_eppn=None,
             tenant_id=None, user_enabled=True, **kwargs):
         user_name = optional_str(user_name)
         user_password = optional_str(user_password)
         user_email = optional_email(user_email)
+        user_eppn = optional_eppn(user_eppn)
 
         data = {
             "user": {
@@ -603,6 +610,7 @@ class FunctionalTestCase(ApiTestCase):
                 "name": user_name,
                 "tenantId": tenant_id,
                 "email": user_email,
+                "eppn": user_eppn,
                 "enabled": user_enabled}}
 
         return self.post_user(as_json=data, **kwargs)

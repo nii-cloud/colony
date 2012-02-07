@@ -46,4 +46,4 @@ Role = create_model(
 Tenant = create_model(
     'Tenant', ['id', 'name', 'desc', 'enabled'])
 User = create_model(
-    'User', ['id', 'name', 'password', 'email', 'enabled', 'tenant_id'])
+    'User', ['id', 'name', 'password', 'email', 'eppn', 'enabled', 'tenant_id'])
