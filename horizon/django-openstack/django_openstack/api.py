@@ -422,7 +422,7 @@ def gakunin_api(request):
                     ' and url "%s"' %
                     (settings.KEYSTONE_ADMIN_TOKEN, url))
     return authext.AdminExt(auth_token=settings.KEYSTONE_ADMIN_TOKEN,
-                                 management_url=url))
+                                 management_url=url)
 
 def extras_api(request):
     LOG.debug('extras_api connection created using token "%s"'
