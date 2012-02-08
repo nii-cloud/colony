@@ -51,7 +51,7 @@ class AuthViewTests(base.BaseViewTests):
                            True, self.TEST_SERVICE_CATALOG)
 
         res = self.client.get(reverse('auth_login'))
-        self.assertRedirectsNoFollow(res, reverse('syspanel_overview'))
+        self.assertRedirectsNoFollow(res, reverse('dash_containers', args=[self.TEST_TENANT]))
 
     def test_login_no_tenants(self):
         NEW_TENANT_ID = '6'
@@ -205,7 +205,7 @@ class AuthViewTests(base.BaseViewTests):
         #self.setActiveUser(username='test', tenant_id=TENANT_ID)
         res = self.client.get(reverse('gakunin_login'))
 
-        self.assertRedirectsNoFollow(res, reverse('syspanel_overview'))
+        self.assertRedirectsNoFollow(res, reverse('dash_containers', args=[TENANT_ID]))
 
     def test_login(self):
         NEW_TENANT_ID = '6'
