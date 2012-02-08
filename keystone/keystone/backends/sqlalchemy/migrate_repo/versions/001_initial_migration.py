@@ -59,6 +59,7 @@ user['id'] = sqlalchemy.Column('id', sqlalchemy.Integer, primary_key=True,
 user['name'] = sqlalchemy.Column('name', sqlalchemy.String(255), unique=True)
 user['password'] = sqlalchemy.Column('password', sqlalchemy.String(255))
 user['email'] = sqlalchemy.Column('email', sqlalchemy.String(255))
+user['eppn'] = sqlalchemy.Column('eppn', sqlalchemy.String(255))
 user['enabled'] = sqlalchemy.Column('enabled', sqlalchemy.Integer)
 user['tenant_id'] = sqlalchemy.Column('tenant_id', sqlalchemy.Integer)
 users = sqlalchemy.Table('users', meta, *user.values())

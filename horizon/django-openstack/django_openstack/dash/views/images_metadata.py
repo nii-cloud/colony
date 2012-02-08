@@ -81,7 +81,6 @@ class UpdateImageForm(forms.SelfHandlingForm):
                     'name': data['name'],
                     'location' : "%s://%s@%s" % (scheme, auth, location)
                 }
-                messages.success(request, meta)
                 api.image_update(request, image_id, meta)
                 messages.success(request, _('Image was successfully updated.'))
 
@@ -200,9 +199,22 @@ def download(request, tenant_id, image_id):
         return shortcuts.redirect('dash_images_metadata', tenant_id)
 
 
+    if not image.location:
+        messages.error(request, "Image location is not specified for %s" % image.name)
+        return shortcuts.redirect('dash_images_metadata', tenant_id)
+        
     scheme, location = _parse_location(image.location)
 
-    try:    
+    try:
+        property_value = []
+        if image.properties:
+            for propkey, propval in image.properties.iteritems():
+                item = """
+               <item>
+                   <name>%s</name>
+                   <value>%s</value>
+               </item>""" % (propkey, propval)
+                property_value.append(item)
         data = """
         <image type="openstack-glance">
           <name>%s</name>
@@ -216,12 +228,13 @@ def download(request, tenant_id, image_id):
               <min_disk>%s</min_disk>
               <min_ram>%s</min_ram>
               <properties>
+              %s
               </properties>
           </info>
         </image>
         """ % (image.name, "%s://%s" % (scheme,location), 
                image.disk_format, image.container_format, image.size, 
-               image.min_disk, image.min_ram)
+               image.min_disk, image.min_ram, ''.join(property_value))
     except AttributeError as e:
         messages.error(request, 
                        'Unable to retrieve image metadata %s' % str(e))

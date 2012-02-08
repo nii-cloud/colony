@@ -146,10 +146,11 @@ class User(object):
     should be considered deprecated.
     """
 
-    def __init__(self, user_id, email, enabled, tenant_id=None):
+    def __init__(self, user_id, email, eppn, enabled, tenant_id=None):
         self.user_id = user_id
         self.tenant_id = tenant_id
         self.email = email
+        self.eppn = eppn 
         self.enabled = bool(enabled)
 
     def to_dom(self):
@@ -161,6 +162,8 @@ class User(object):
             dom.set("tenantId", self.tenant_id)
         if self.email:
             dom.set("email", self.email)
+        if self.eppn:
+            dom.set("eppn", self.eppn)
         if self.enabled:
             dom.set("enabled", str(self.enabled).lower())
         return dom
@@ -172,6 +175,7 @@ class User(object):
         user = {}
         user["id"] = self.user_id
         user["email"] = self.email
+        user["eppn"] = self.eppn
         user["enabled"] = str(self.enabled).lower()
         if self.tenant_id:
             user["tenantId"] = self.tenant_id

@@ -42,6 +42,13 @@ class UserController(wsgi.Controller):
         return utils.send_result(204, req, rval)
 
     @utils.wrap_error
+    def set_user_eppn(self, req, user_id):
+        user = utils.get_normalized_request_content(User_Update, req)
+        rval = config.SERVICE.set_user_eppn(utils.get_auth_token(req),
+            user_id, user)
+        return utils.send_result(200, req, rval)
+
+    @utils.wrap_error
     def set_user_password(self, req, user_id):
         user = utils.get_normalized_request_content(User_Update, req)
         rval = config.SERVICE.set_user_password(utils.get_auth_token(req),

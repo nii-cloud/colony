@@ -24,6 +24,7 @@
                 <attribute name="id" type="xsd:ID" use="prohibited"/>
                 <attribute name="defaultTenantId" type="xsd:string" use="prohibited"/>
                 <attribute name="email" type="xsd:string" use="prohibited"/>
+                <attribute name="eppn" type="xsd:string" use="prohibited"/>
                 <attribute name="enabled" type="xsd:boolean" use="prohibited"/>
             </restriction>
         </complexContent>
@@ -34,6 +35,7 @@
             <restriction base="identity:User">
                 <attribute name="id" type="xsd:ID" use="prohibited"/>
                 <attribute name="email" type="xsd:string" use="prohibited"/>
+                <attribute name="eppn" type="xsd:string" use="prohibited"/>
                 <attribute name="enabled" type="xsd:boolean" use="prohibited"/>
                 <attribute name="defaultTenantId" type="xsd:string" use="required"/>
             </restriction>
