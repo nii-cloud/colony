@@ -414,11 +414,15 @@ def admin_api(request):
                                  management_url=url_for(request, 'compute', True))
 
 def gakunin_api(request):
+    try:
+        url = url_for(request, 'identity', True)
+    except ServiceCatalogException, ex:
+        url = settings.OPENSTACK_KEYSTONE_ADMIN_URL
     LOG.debug('admin_api connection created using token "%s"'
                     ' and url "%s"' %
-                    (settings.KEYSTONE_ADMIN_TOKEN, url_for(request, 'identity', True)))
+                    (settings.KEYSTONE_ADMIN_TOKEN, url))
     return authext.AdminExt(auth_token=settings.KEYSTONE_ADMIN_TOKEN,
-                                 management_url=url_for(request, 'identity', True))
+                                 management_url=url))
 
 def extras_api(request):
     LOG.debug('extras_api connection created using token "%s"'
@@ -881,6 +885,7 @@ def swift_get_container(request, name):
 
 
 def swift_set_container_info(request, name, hdrs):
+
     response = swift_api(request).make_request('POST', [ name ], data='', hdrs=hdrs)
     buff = response.read()
 
@@ -974,6 +979,9 @@ def swift_remove_object_info(request, container_name, object_name, meta):
             del object.metadata[key]
         except KeyError:
             pass
+    if not object.metadata:
+       # FIXME added dummy attr
+       object.metadata[''] = ''
     object.sync_metadata()
     
 def quantum_list_networks(request):
