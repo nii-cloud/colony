@@ -58,7 +58,10 @@ class BaseLdapAPI(object):
             except KeyError:
                 pass
             else:
-                     obj[k] = v[0]
+                try:
+                    obj[k] = v[0]
+                except IndexError:
+                    obj[k] = None
         return obj
 
     def create(self, values):
@@ -74,7 +77,7 @@ class BaseLdapAPI(object):
         if 'groupOfNames' in object_classes and self.use_dumb_member:
             attrs.append(('member', [self.DUMB_MEMBER_DN]))
         conn.add_s(self._id_to_dn(values['id']), attrs)
-        return self.model(values)
+        return self.model(**values)
 
     def _ldap_get(self, id, filter=None):
         conn = self.api.get_connection()

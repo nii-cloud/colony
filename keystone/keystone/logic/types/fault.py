@@ -144,6 +144,13 @@ class EmailConflictFault(IdentityFault):
         super(EmailConflictFault, self).__init__(msg, details, code)
         self.key = "emailConflict"
 
+class EppnConflictFault(IdentityFault):
+    """The Eppn already exists?"""
+
+    def __init__(self, msg, details=None, code=409):
+        super(EppnConflictFault, self).__init__(msg, details, code)
+        self.key = "eppnConflict"
+
 
 class RoleConflictFault(IdentityFault):
     """The User already exists?"""

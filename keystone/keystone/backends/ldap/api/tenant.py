@@ -35,7 +35,10 @@ class TenantAPI(BaseLdapAPI, BaseTenantAPI):
 
         id_list.sort()
         id_max = id_list[-1]
+
         values['id'] = str(id_max + 1)
+
+        return super(TenantAPI, self).create(values)
 
     def get_user_tenants(self, user_id, include_roles=True):
         user_dn = self.api.user._id_to_dn(user_id)

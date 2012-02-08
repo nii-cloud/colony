@@ -34,6 +34,29 @@ class BaseUserAPI(object):
     def get_by_email(self, email):
         raise NotImplementedError
 
+    def get_by_eppn(self, eppn):
+        raise NotImplementedError
+
+    def get_page(self, marker, limit):
+        raise NotImplementedError
+
+    def get_page_markers(self, marker, limit):
+        raise NotImplementedError
+
+    def user_roles_by_tenant(self, user_id, tenant_id):
+        raise NotImplementedError
+
+    def update(self, id, values):
+        raise NotImplementedError
+
+    def delete(self, id):
+        raise NotImplementedError
+
+    def get_by_tenant(self, id, tenant_id):
+        raise NotImplementedError
+
+    def get_by_access(self, access):
+        raise NotImplementedError
     def get_page(self, marker, limit):
         raise NotImplementedError
 
