@@ -5,34 +5,32 @@ components:
 
 
 config_item_defaults:
-  - name: openstack_compute_enabled
-    value: False
-  - name: openstack_keystone_url
-    value: "http://localhost:5000/v2.0"
-  - name: openstack_keystone_admin_url
-    value: "http://localhost:35357/v2.0"
-  - name: openstack_keystone_default_role
-    value: 'Member'
-  - name: swift_enabled
-    value: True
-  - name: image_metadata_glance_enabled
-    value: False
-  - name: quantum_enabled
-    value: False
-  - name: quantum_url
+  - name: bind_ip
     value: "127.0.0.1"
-  - name: quantum_port
-    value: "9696"
-  - name: quantum_tenant
-    value: "1234"
-  - name: quantum_client_version
-    value: "0.1"
+  - name: bind_port
+    value: "10000"
+  - name: user
+    value: "dispatcher"
+  - name: log_facility
+    value: "LOG_LOCAL1"
+  - name: log_name
+    value: "dispatcher"
+  - name: auth_protocol
+    value: "http"
+  - name: auth_host
+    value: "127.0.0.1"
+  - name: auth_port
+    value: "5000"
+  - name: relay_rule
+    value: ":http://localhost"
 
 component_config_defaults:
-  - path: /tmp/local_settings.py
+  - path: /etc/dispatcher.conf
     component: colony_dispatcher
 
 software_config_defaults:
 
 test_components:
   - component: colony_dispatcher
+
+

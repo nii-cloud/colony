@@ -3,20 +3,23 @@ description: colony horizon
 components:
   - name: colony_horizon
 
-
 config_item_defaults:
   - name: openstack_compute_enabled
     value: False
   - name: openstack_keystone_url
     value: "http://localhost:5000/v2.0"
   - name: openstack_keystone_admin_url
-    value: "http://localhost:35357/v2.0"
+    value: "http://localhost:5001/v2.0"
   - name: openstack_keystone_default_role
     value: 'Member'
   - name: swift_enabled
     value: True
+  - name: swift_large_object_size
+    value: "107374182400"
+  - name: swift_large_object_chunk_size
+    value: "104857600"
   - name: image_metadata_glance_enabled
-    value: False
+    value: True
   - name: quantum_enabled
     value: False
   - name: quantum_url
@@ -27,9 +30,12 @@ config_item_defaults:
     value: "1234"
   - name: quantum_client_version
     value: "0.1"
+  - name: gakunin_enabled
+    value: True
+
 
 component_config_defaults:
-  - path: /tmp/local_settings.py
+  - path: /usr/local/share/dash/local/local_settings.py
     component: colony_horizon
 
 software_config_defaults:
