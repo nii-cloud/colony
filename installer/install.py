@@ -198,7 +198,7 @@ class ConfigManager(object):
                 if install:
                     value.ask()
                 for comp_name, comp_configs in value.components.iteritems():
-                    scripts = self._get_install_scripts(name, comp_name, install)
+                    scripts  = self._get_install_scripts(name, comp_name, install)
                     if os.path.exists(scripts):
                         print 'executing scripts %s' % scripts
                         if not run_command(scripts, redirect_output=False):
