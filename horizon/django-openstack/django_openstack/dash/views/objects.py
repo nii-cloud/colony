@@ -116,10 +116,17 @@ class CopyObject(forms.SelfHandlingForm):
         self.fields['new_container_name'].choices = containers
 
     def handle(self, request, data):
+
+
         orig_container_name = data['orig_container_name']
         orig_object_name = data['orig_object_name']
         new_container_name = data['new_container_name']
         new_object_name = data['new_object_name']
+        orig_container_name = orig_container_name.encode('utf-8')
+        orig_object_name = orig_object_name.encode('utf-8')
+        new_container_name = new_container_name.encode('utf-8')
+        new_object_name = new_object_name.encode('utf-8')
+
 
         api.swift_copy_object(request, orig_container_name,
                               orig_object_name, new_container_name,
@@ -221,7 +228,7 @@ def download(request, tenant_id, container_name, object_name):
 
     response = http.HttpResponse()
     response['Content-Disposition'] = 'attachment; filename=%s' % \
-            object_name
+            object_name.encode('utf-8')
     for data in object_data:
         response.write(data)
     return response
