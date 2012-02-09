@@ -66,3 +66,6 @@ def quantum(request):
 
 def image_metadata_glance(request):
     return {'image_metadata_glance' : settings.IMAGE_METADATA_GLANCE_ENABLED}
+
+def gakunin(request):
+    return {'gakunin_configured' : settings.GAKUNIN_ENABLED }

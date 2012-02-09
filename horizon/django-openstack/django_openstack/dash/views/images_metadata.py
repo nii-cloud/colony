@@ -123,11 +123,12 @@ class UploadMetadata(forms.SelfHandlingForm):
         min_disk = root.findtext("info/min_disk")
         min_ram = root.findtext("info/min_ram")
 
-
-        api.image_create(request, image, None)
+        try:
+            api.image_create(request, image, None)
+            messages.success(request, "Image Metadata was successfully registerd")
+        except glance_exception.BadStoreUri as e:
+            messages.error(request, 'hogehoge %s' % str(e))
         
-        messages.success(request, "Image Metadata was successfully registerd")
-        messages.error(request, data)
         return shortcuts.redirect(request.build_absolute_uri())
 
 # utility
@@ -136,7 +137,7 @@ def _parse_location(url):
     location = image_loc.netloc.split('@', 1)[-1]
     if location.startswith('['):
        location = location[1:].split(']')[0]
-    return image_loc.scheme, location
+    return image_loc.scheme, location, image_loc.path
 
 
 @login_required
@@ -203,18 +204,19 @@ def download(request, tenant_id, image_id):
         messages.error(request, "Image location is not specified for %s" % image.name)
         return shortcuts.redirect('dash_images_metadata', tenant_id)
         
-    scheme, location = _parse_location(image.location)
+    scheme, location, path = _parse_location(image.location)
 
     try:
         property_value = []
         if image.properties:
-            for propkey, propval in image.properties.iteritems():
-                item = """
-               <item>
-                   <name>%s</name>
-                   <value>%s</value>
-               </item>""" % (propkey, propval)
-                property_value.append(item)
+            for key in ['architecture', 'image_location', 'image_state', 'kernel_id', 'project_id', 'ramdisk_id']:
+                if image.properties.get(key):
+                    item = """
+                   <item>
+                       <name>%s</name>
+                       <value>%s</value>
+                   </item>""" % (propkey, propval)
+                    property_value.append(item)
         data = """
         <image type="openstack-glance">
           <name>%s</name>
@@ -232,7 +234,7 @@ def download(request, tenant_id, image_id):
               </properties>
           </info>
         </image>
-        """ % (image.name, "%s://%s" % (scheme,location), 
+        """ % (image.name, "%s://%s/%s" % (scheme,location, path), 
                image.disk_format, image.container_format, image.size, 
                image.min_disk, image.min_ram, ''.join(property_value))
     except AttributeError as e:
@@ -259,11 +261,11 @@ def update(request, tenant_id, image_id):
         messages.error(request, "Error retrieving image %s: %s"
                                  % (image_id, e.message))
 
-    scheme, location = _parse_location(image.location)
+    scheme, location, path = _parse_location(image.location)
     form, handled = UpdateImageForm.maybe_handle(request, initial={
                  'image_id': image_id,
                  'name': image.get('name', ''),
-                 'location' : '%s://%s' % ( scheme, location),
+                 'location' : '%s://%s/%s' % ( scheme, location, path),
                  'user': request.user.username,
                  'password' : '',
                  })
