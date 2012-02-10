@@ -90,6 +90,8 @@ class Login(forms.SelfHandlingForm):
 
             request.session['admin'] = is_admin(token)
             request.session['serviceCatalog'] = token.serviceCatalog
+            if not request.session.get('defaultServiceCatalog'):
+                request.session['defaultServiceCatalog'] = token.serviceCatalog
 
             LOG.info('Login form for user "%s". Service Catalog data:\n%s' %
                      (data['username'], token.serviceCatalog))
