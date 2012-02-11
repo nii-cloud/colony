@@ -51,12 +51,12 @@
     </td>
     </tr>
     {% endfor %}
-    <tr class="{%cycle 'odd' 'even' %}">
     {% for acl in read_acl_ref %}
+    <tr class="{%cycle 'odd' 'even' %}">
     <td><div class='ui-icon ui-icon-extlink'></div>{{ acl }}</td>
-    <td align="right" id="actions">
-      <div class="fuga">
-      <button style="font-size:10px">Remove</button>
+     <td id="actions" align="right" width="100px">
+      <div class="form" style="margin: 0" width="100px">
+      {% include 'django_openstack/dash/containers/_acl_remove_read.html' with form=remove_form greetings="HI" %}
       </div>
     </td>
     </tr>
