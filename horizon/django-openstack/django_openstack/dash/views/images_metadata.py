@@ -61,7 +61,7 @@ class UpdateImageForm(forms.SelfHandlingForm):
         error_retrieving = _('Unable to retreive image info from glance: %s' % image_id)
         error_updating = _('Error updating image with id: %s' % image_id)
 
-        scheme, location = _parse_location(data['location'])
+        scheme, loc, path = _parse_location(data['location'])
         auth = ":".join([data['user'] , data['password']])
 
         try:
@@ -79,7 +79,7 @@ class UpdateImageForm(forms.SelfHandlingForm):
                 meta = {
                     'is_public': True,
                     'name': data['name'],
-                    'location' : "%s://%s@%s" % (scheme, auth, location)
+                    'location' : "%s://%s@%s%s" % (scheme, auth, loc, path)
                 }
                 api.image_update(request, image_id, meta)
                 messages.success(request, _('Image was successfully updated.'))
@@ -234,7 +234,7 @@ def download(request, tenant_id, image_id):
               </properties>
           </info>
         </image>
-        """ % (image.name, "%s://%s/%s" % (scheme,location, path), 
+        """ % (image.name, "%s://%s%s" % (scheme,location, path), 
                image.disk_format, image.container_format, image.size, 
                image.min_disk, image.min_ram, ''.join(property_value))
     except AttributeError as e:
@@ -265,7 +265,7 @@ def update(request, tenant_id, image_id):
     form, handled = UpdateImageForm.maybe_handle(request, initial={
                  'image_id': image_id,
                  'name': image.get('name', ''),
-                 'location' : '%s://%s/%s' % ( scheme, location, path),
+                 'location' : '%s://%s%s' % ( scheme, location, path),
                  'user': request.user.username,
                  'password' : '',
                  })
