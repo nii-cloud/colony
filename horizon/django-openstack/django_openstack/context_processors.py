@@ -39,7 +39,7 @@ def regions(request):
     if not request.user or not request.user.is_authenticated():
         return {}
     try:
-        catalogs = request.user.service_catalog
+        catalogs = request.session['defaultServiceCatalog']
         results = []
         for catalog in catalogs:
             regions = [ api.Region(id=i+1, name=catalog['endpoints'][i]['region']) for i in range(len(catalog['endpoints'])) ]
