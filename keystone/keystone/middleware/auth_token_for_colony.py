@@ -81,6 +81,7 @@ import keystone.tools.tracer  # @UnusedImport # module runs on import
 from keystone.common.bufferedhttp import http_connect_raw as http_connect
 from swift.common.middleware.acl import clean_acl, parse_acl, referrer_allowed
 from swift.common.utils import cache_from_env, split_path, TRUE_VALUES, get_logger
+from swift.proxy.server import get_container_memcache_key
 
 PROTOCOL_NAME = "Token Authentication"
 
@@ -307,6 +308,7 @@ class AuthProtocol(object):
          3. All user read or write objects with no contaner acl.
          4. But any user are limited by container acl if exists.
         """
+        #print 'req: %s' % dir(req)
         try:
             version, account, container, obj = split_path(req.path, 1, 4, True)
         except ValueError:
@@ -324,14 +326,39 @@ class AuthProtocol(object):
             self.logger.info('HEAD or GET account all ok')
             return None
         # Any user creates container
+        write_cont_acl = None
         if req.method in ['PUT', 'POST', 'DELETE'] and container and not obj:
-            self.logger.info('Any user create container')
-            return None
-        if hasattr(req, 'acl'):
-            self.logger.info('container acl: %s' % req.acl)
-            referrers, groups = parse_acl(req.acl)
-            self.logger.info('referrers: %s' % referrers)
-            self.logger.info('group: %s' % groups)
+            #cache_key = get_container_memcache_key(account, container)
+            #memcache_client = cache_from_env(req.environ)
+            #print 'memcache: %s' % memcache_client.get(cache_key)
+            connect = httplib.HTTPConnection if self.auth_protocol == 'http' else httplib.HTTPSConnection
+            #print 'SERVER_INFO: %s:%s' % (req.server_name, req.server_port)
+            conn = connect('%s:%s' % (req.server_name, req.server_port), timeout=10)
+            #print 'PATH_INFO: /v1.0/%s' % req.path_info
+            conn.request('HEAD', '/v1.0%s' % req.path_info, None, req.headers)
+            resp = conn.getresponse()
+            #print 'resp: %s' % resp.status 
+            if resp.status == 204 and resp.getheader('x-container-write'):
+                write_cont_acl = resp.getheader('x-container-write')
+                #print 'write_cont_acl: %s' % write_cont_acl
+            #if hasattr(req, 'acl'):
+            #    self.logger.info('ACL in write: %s' % req.acl)
+            #self.logger.info('Any user create container')
+        tenant = user_groups[1] if len(user_groups) >= 2 else ''
+        if account != 'AUTH_%s' % tenant and req.method == 'POST' and container and not obj:
+            #print 'account: %s, tenant: %s' % (account, tenant)
+            return self.denied_response(req)
+        if hasattr(req, 'acl') or write_cont_acl:
+            if write_cont_acl:
+                self.logger.info('w container acl: %s' % write_cont_acl)
+                referrers, groups = parse_acl(write_cont_acl)
+                self.logger.info('w referrers: %s' % referrers)
+                self.logger.info('w group: %s' % groups)
+            else:
+                self.logger.info('container acl: %s' % req.acl)
+                referrers, groups = parse_acl(req.acl)
+                self.logger.info('referrers: %s' % referrers)
+                self.logger.info('group: %s' % groups)
             if referrer_allowed(req.referer, referrers):
                 if obj or '.rlistings' in groups:
                     self.logger.info('referer_allowed')
@@ -347,6 +374,10 @@ class AuthProtocol(object):
                 return None
             self.logger.info('group not allowed.')
             return self.denied_response(req)
+        # Any user creates container
+        if req.method in ['PUT', 'POST', 'DELETE'] and container and not obj:
+            self.logger.info('Any user delete container or write metadata by default.')
+            return None
         self.logger.info('request forbidden')
         return self.denied_response(req)
 
