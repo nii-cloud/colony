@@ -206,7 +206,6 @@ class Dispatcher(object):
             try:
                 req = self.copy_to_put(req)
             except Exception, e: 
-                print dir(e)
                 resp = HTTPPreconditionFailed(request=req, body=e.message)
                 start_response(resp.status, resp.headerlist)
                 return resp.body
@@ -284,31 +283,6 @@ class Dispatcher(object):
             return self.get_merged_containers_resp(req, location)
         return HTTPNotFound(request=req)
 
-    def copy_to_put(self, req):
-        """HTTP COPY request handler."""
-        try:
-            _junk, ver, account, container, obj = req.path_info.split('/')
-        except ValueError:
-            raise Exception('COPY requires object')
-        dest = req.headers.get('Destination')
-        if not dest:
-            raise Exception('Destination header required')
-        dest = unquote(dest)
-        if not dest.startswith('/'):
-            dest = '/' + dest
-        try:
-            _junk, dest_container, dest_object = dest.split('/', 2)
-        except ValueError:
-            raise Exception('Destination header must be of the form <container name>/<object name>')
-        source = '/' + unquote(container) + '/' + unquote(obj)
-        # re-write the existing request as a PUT instead of creating a new one
-        # since this one is already attached to the posthooklogger
-        req.method = 'PUT'
-        req.path_info = '/v1.0/' + account + dest
-        req.headers['Content-Length'] = 0
-        req.headers['X-Copy-From'] = quote(source)
-        del req.headers['Destination']
-        return req
 
     def get_merged_auth_resp(self, req, location):
         """ """
@@ -517,6 +491,33 @@ class Dispatcher(object):
                                     from_real_path_ls[1], container, obj, query,
                                     '',
                                     0)
+
+    def copy_to_put(self, req):
+        """HTTP COPY request handler."""
+        try:
+            _junk, ver, account, container, obj = req.path_info.split('/')
+        except ValueError:
+            raise Exception('COPY requires object')
+        dest = req.headers.get('Destination')
+        if not dest:
+            raise Exception('Destination header required')
+        dest = unquote(dest)
+        if not dest.startswith('/'):
+            dest = '/' + dest
+        try:
+            _junk, dest_container, dest_object = dest.split('/', 2)
+        except ValueError:
+            raise Exception('Destination header must be of the form <container name>/<object name>')
+        source = '/' + unquote(container) + '/' + unquote(obj)
+        # re-write the existing request as a PUT instead of creating a new one
+        # since this one is already attached to the posthooklogger
+        req.method = 'PUT'
+        req.path_info = '/' + self.req_version_str + '/' + account + dest
+        req.headers['Content-Length'] = 0
+        req.headers['X-Copy-From'] = quote(source)
+        del req.headers['Destination']
+        return req
+
 
     # utils
     def check_error_resp(self, resps):
