@@ -34,7 +34,7 @@ def put_rings(preauth_url, identity, password, container, ring_name, ring_file):
     try:
         storage_url, auth_token =  get_auth(preauth_url, identity, password)
     except Exception, e:
-        return False, "authentifixation failed from %s: %s" % (preauth_url, e)
+        return False, "authentification failed from %s: %s" % (preauth_url, e)
     create_connection = lambda: Connection(preauth_url, identity, password, 
                                            preauthurl=storage_url, 
                                            preauthtoken=auth_token)
