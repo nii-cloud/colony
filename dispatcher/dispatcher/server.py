@@ -202,13 +202,6 @@ class Dispatcher(object):
         self.loc.reload()
         if self.loc.age == 0:
             self.logger.warn('dispatcher relay rule is invalid, using old rules now.')
-        if req.method == 'COPY':
-            try:
-                req = self.copy_to_put(req)
-            except Exception, e: 
-                resp = HTTPPreconditionFailed(request=req, body=e.message)
-                start_response(resp.status, resp.headerlist)
-                return resp.body
         loc_prefix = self.location_check(req)
         if not self.loc.has_location(loc_prefix):
             resp = HTTPNotFound(request=req)
@@ -216,6 +209,13 @@ class Dispatcher(object):
             return resp.body
         if self.loc.is_merged(loc_prefix):
             self.logger.debug('enter merge mode')
+            if req.method == 'COPY':
+                try:
+                    req = self.copy_to_put(req)
+                except Exception, e: 
+                    resp = HTTPPreconditionFailed(request=req, body=e.message)
+                    start_response(resp.status, resp.headerlist)
+                    return resp.body
             resp = self.dispatch_in_merge(req, loc_prefix)
         else:
             self.logger.debug('enter normal mode')
@@ -495,7 +495,7 @@ class Dispatcher(object):
     def copy_to_put(self, req):
         """HTTP COPY request handler."""
         try:
-            _junk, ver, account, container, obj = req.path_info.split('/')
+            _junk, loc, ver, account, container, obj = req.path_info.split('/')
         except ValueError:
             raise Exception('COPY requires object')
         dest = req.headers.get('Destination')
@@ -512,9 +512,9 @@ class Dispatcher(object):
         # re-write the existing request as a PUT instead of creating a new one
         # since this one is already attached to the posthooklogger
         req.method = 'PUT'
-        req.path_info = '/' + self.req_version_str + '/' + account + dest
-        req.headers['Content-Length'] = 0
-        req.headers['X-Copy-From'] = quote(source)
+        req.path_info = '/' + loc + '/' + self.req_version_str + '/' + account + dest
+        req.headers['Content-Length'] = '0'
+        req.headers['X-Copy-From'] = source
         del req.headers['Destination']
         return req
 
