@@ -81,6 +81,7 @@ import keystone.tools.tracer  # @UnusedImport # module runs on import
 from keystone.common.bufferedhttp import http_connect_raw as http_connect
 from swift.common.middleware.acl import clean_acl, parse_acl, referrer_allowed
 from swift.common.utils import cache_from_env, split_path, TRUE_VALUES, get_logger
+from swift.proxy.server import get_container_memcache_key
 
 PROTOCOL_NAME = "Token Authentication"
 
@@ -304,7 +305,7 @@ class AuthProtocol(object):
         add by colony.
          1. All user GET or HEAD account.
          2. All user create a container.
-         3. All user read or write objects with no contaner acl.
+         3. All user read or write objects without contaner acl.
          4. But any user are limited by container acl if exists.
         """
         try:
@@ -312,42 +313,63 @@ class AuthProtocol(object):
         except ValueError:
             return HTTPNotFound(request=req)
         if not account:
-            self.logger.info('no account')
+            self.logger.debug('no account')
             return self.denied_response(req)
         user_groups = (req.remote_user or '').split(',')
-        self.logger.info('request_remote_user: %s' % req.remote_user)
-        self.logger.info('request_method: %s' % req.method)
-        # all user has normal authority, but 'swift_owner'.
+        self.logger.debug('request_remote_user: %s' % req.remote_user)
+        self.logger.debug('request_method: %s' % req.method)
+        # All user has admin authority, so they set 'swift_owner' as True.
         req.environ['swift_owner'] = True
         # Any user GET or HEAD account
         if req.method in ['HEAD', 'GET'] and not container:
-            self.logger.info('HEAD or GET account all ok')
+            self.logger.debug('HEAD or GET account all ok')
             return None
-        # Any user creates container
+        # Getting container acls for container writing request,
+        #  because PUT/POST/DELETE container doesn't return container acls.
+        write_cont_acl = None
         if req.method in ['PUT', 'POST', 'DELETE'] and container and not obj:
-            self.logger.info('Any user create container')
-            return None
-        if hasattr(req, 'acl'):
-            self.logger.info('container acl: %s' % req.acl)
-            referrers, groups = parse_acl(req.acl)
-            self.logger.info('referrers: %s' % referrers)
-            self.logger.info('group: %s' % groups)
+            connect = httplib.HTTPConnection if self.auth_protocol == 'http' else httplib.HTTPSConnection
+            conn = connect('%s:%s' % (req.server_name, req.server_port), timeout=10)
+            conn.request('HEAD', '/v1.0%s' % req.path_info, None, req.headers)
+            resp = conn.getresponse()
+            if resp.status == 204 and resp.getheader('x-container-write'):
+                write_cont_acl = resp.getheader('x-container-write')
+        # Deny the other account requesting 'POST' container
+        # for modify container acl (and the other metadata)
+        tenant = user_groups[1] if len(user_groups) >= 2 else ''
+        if account != 'AUTH_%s' % tenant and req.method == 'POST' and container and not obj:
+            return self.denied_response(req)
+        if hasattr(req, 'acl') or write_cont_acl:
+            if write_cont_acl:
+                self.logger.debug('write container acl: %s' % write_cont_acl)
+                referrers, groups = parse_acl(write_cont_acl)
+                self.logger.debug('write referrers: %s' % referrers)
+                self.logger.debug('write group: %s' % groups)
+            else:
+                self.logger.debug('container acl: %s' % req.acl)
+                referrers, groups = parse_acl(req.acl)
+                self.logger.debug('referrers: %s' % referrers)
+                self.logger.debug('group: %s' % groups)
             if referrer_allowed(req.referer, referrers):
                 if obj or '.rlistings' in groups:
-                    self.logger.info('referer_allowed')
+                    self.logger.debug('referer_allowed')
                     return None
             if not req.remote_user:
                 return self.denied_response(req)
             for user_group in user_groups:
                 if user_group in groups:
-                    self.logger.info('group_allowed: %s' % user_group)
+                    self.logger.debug('group_allowed: %s' % user_group)
                     return None
             if not referrers and not groups:
-                self.logger.info('no acl allow default access')
+                self.logger.debug('no acl allow default access')
                 return None
-            self.logger.info('group not allowed.')
+            self.logger.debug('group not allowed.')
             return self.denied_response(req)
-        self.logger.info('request forbidden')
+        # Any user creates container by default
+        if req.method in ['PUT', 'POST', 'DELETE'] and container and not obj:
+            self.logger.debug('Any user delete container or write metadata by default.')
+            return None
+        self.logger.debug('request forbidden')
         return self.denied_response(req)
 
 

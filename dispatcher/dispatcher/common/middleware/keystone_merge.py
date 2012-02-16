@@ -46,6 +46,7 @@ class KeystoneMerge(object):
         """ """
         req = Request(env)
         real_path = '/' + '/'.join(req.path.split('/')[2:])
+        print real_path
         if not self.is_keystone_req(req):
             self.logger.info('pass through')
             return self.app(env, start_response)
@@ -94,9 +95,14 @@ class KeystoneMerge(object):
         """
         path_ls = req.path.split('/')
         rewrite_path = '/%s' % '/'.join(path_ls[2:])
-        tokens = req.headers['x-auth-token']
-        one_token = tokens.split(self.merge_str)[0]
-        req.headers['x-auth-token'] = one_token
+
+        try:
+            tokens = req.headers['x-auth-token']
+            one_token = tokens.split(self.merge_str)[0]
+            req.headers['x-auth-token'] = one_token
+        except KeyError, e:
+            # this case is happend when auth request
+            pass
         return self._request_to_keystone(req.method, self.keystone_one_url, 
                                          rewrite_path, req.headers, req.body)
 
@@ -108,14 +114,27 @@ class KeystoneMerge(object):
         request = json.loads(req.body)
         creds = request['auth'] if request.has_key('auth') else request
         resps = []
-        if creds.has_key('token') and path == '/v2.0/tokens':
+        if creds.has_key('token') and path.rstrip('/') == '/v2.0/tokens':
             # for recomfirming auth token
             merged_token = creds['token']['id']
             if merged_token.find(self.merge_str) == -1:
                 return None, None
             requests = self._merged_request_token_split(request)
+           
+            auth_headers = [] 
+            if req.headers.has_key('x-auth-token'):
+               auth_headers = req.headers.get('x-auth-token').split(self.merge_str)
             for url,request in zip([self.keystone_one_url, self.keystone_other_url], requests):
-                resp = self._request_to_keystone('POST', url, path, 
+                print request
+                print url
+                print path
+                print req.headers
+                try:
+                    auth_header = auth_headers.pop()
+                    req.headers['x-auth-token'] = auth_header
+                except IndexError, e:
+                    pass
+                resp = self._request_to_keystone('POST', url, path.rstrip('/') + '/', 
                                                  req.headers, json.dumps(request))
                 resps.append(resp)
         else:
@@ -128,9 +147,10 @@ class KeystoneMerge(object):
     def _merged_request_token_split(self, request):
         requests = []
         merged_token = request['auth']['token']['id']
+        tenant_id = request['auth']['tenantId']
         tokens = merged_token.split(self.merge_str)
         for token in tokens:
-            each_request = {'auth': {'token': {'id': token}, "tenantId": ""}}
+            each_request = {'auth': {'token': {'id': token}, "tenantId": tenant_id}}
             requests.append(each_request)
         return requests
 
@@ -198,6 +218,8 @@ class KeystoneMerge(object):
 
     def _get_merged_common_path(self, urls):
         paths = [urlparse(u).path for u in urls]
+        if not paths:
+            return None
         if not filter(lambda a: paths[0] != a, paths):
             return paths[0]
         return None
@@ -233,7 +255,14 @@ class KeystoneMerge(object):
         connector = HTTPSConnection if parsed.scheme == 'https' else HTTPConnection 
         host, port = self._split_netloc(parsed)
         with ConnectionTimeout(300):
+            print host
+            print port
+            print path
+            print body
+            print headers
+            print len(body)
             conn = connector(host, port)
+            headers['Content-Length'] = len(body)
             conn.request(method, path, body, headers)
             with Timeout(300):
                 return conn.getresponse()
