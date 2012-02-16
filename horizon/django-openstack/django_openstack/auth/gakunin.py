@@ -43,47 +43,53 @@ def login(request):
     from_email = request.META.get('email', None)
     from_eppn = request.META.get('eppn', None)
 
-    token = None
-    # first , try by eppn
-    if from_eppn:
-        token = api.token_create_by_eppn(request, from_eppn)
-
-    # second, try by email
-    if not token and from_email:
-        token = api.token_create_by_email(request, from_email)
-
-    def get_first_tenant_for_user():
-        tenants = api.tenant_list_for_token(request, token.id)
-        return tenants[0] if len(tenants) else None
-
-    if not token:
-        messages.error(request, "Can't retrieve information from Gakunin")
-        return shortcuts.redirect('auth_login')
-
-    tenant = get_first_tenant_for_user()
-
-    if not tenant:
-        messages.error(request, 'No tenants present for user')
-        return shortcuts.redirect('auth_login')
-
-    request.session['unscoped_token'] = token.id
-
-    def is_admin(token):
-        for role in token.user['roles']:
-            if role['name'].lower() == 'admin':
-                return True
-        return False
-
-
-    request.session['admin'] = is_admin(token)
-
-    if not token.user or not token.user.has_key('name'):
-        return shortcuts.redirect('auth_login')
-    request.session['serviceCatalog'] = token.serviceCatalog
-    request.session['tenant_id'] = tenant.id
-    request.session['tenant'] = tenant.name
-    request.session['token'] = token.id
-    request.session['user'] = token.user['name']
-
-    return shortcuts.redirect('dash_containers', tenant.id)
+    try:
+        token = None
+        # first , try by eppn
+        if from_eppn:
+            token = api.token_create_by_eppn(request, from_eppn)
+ 
+        # second, try by email
+        if not token and from_email:
+            token = api.token_create_by_email(request, from_email)
+            if token:
+                api.user_update_eppn(request, token.user['id'], from_eppn)
+ 
+        def get_first_tenant_for_user():
+            tenants = api.tenant_list_for_token(request, token.id)
+            return tenants[0] if len(tenants) else None
+ 
+        if not token:
+            messages.error(request, "Can't retrieve information from Gakunin")
+            return shortcuts.redirect('auth_login')
+ 
+        tenant = get_first_tenant_for_user()
+ 
+        if not tenant:
+            messages.error(request, 'No tenants present for user')
+            return shortcuts.redirect('auth_login')
+ 
+        request.session['unscoped_token'] = token.id
+ 
+        def is_admin(token):
+            for role in token.user['roles']:
+                if role['name'].lower() == 'admin':
+                    return True
+            return False
+ 
+ 
+        request.session['admin'] = is_admin(token)
+ 
+        if not token.user or not token.user.has_key('name'):
+            return shortcuts.redirect('auth_login')
+        request.session['serviceCatalog'] = token.serviceCatalog
+        request.session['tenant_id'] = tenant.id
+        request.session['tenant'] = tenant.name
+        request.session['token'] = token.id
+        request.session['user'] = token.user['name']
+ 
+        return shortcuts.redirect('dash_containers', tenant.id)
+    except Exception, e:
+        messages.error('Exception occured while gakunin login %s' % str(e))
+        return shortcuts.redirect('auth_login') 
 

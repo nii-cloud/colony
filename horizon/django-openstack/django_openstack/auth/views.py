@@ -26,6 +26,9 @@ from django.contrib import messages
 
 from django_openstack import api
 from django_openstack import forms
+from django_openstack.auth import util
+from django.conf import settings
+
 from openstackx.api import exceptions as api_exceptions
 
 
@@ -39,88 +42,42 @@ class Login(forms.SelfHandlingForm):
 
     def handle(self, request, data):
 
-        def is_admin(token):
-            for role in token.user['roles']:
-                if role['name'].lower() == 'admin':
-                    return True
-            return False
+        retval = util.auth(request, data, data.get('region'))
+        catalogs = request.session.get('defaultServiceCatalog')
+        results = set()
+        if catalogs:
+            for catalog in catalogs:
+                regions = [ catalog['endpoints'][i]['region'] for i in range(len(catalog['endpoints'])) ]
+                for region in regions:
+                    results.add(region)
 
-        try:
-            if data.get('region'):
-               request.session['region'] = data.get('region')
-            if data.get('tenant'):
-                token = api.token_create_with_region(request,
-                                         data.get('tenant'),
-                                         data['username'],
-                                         data['password'])
+        LOG.info('results %s' % results)
+      
+        for result in results:
+            data['region'] = result
+            util.auth(request, data, result, False)
+            if api.token_for_region(request, result) == request.session.get('token'):
+                request.session['region'] = result.encode('utf-8')
 
-                tenants = api.tenant_list_for_token(request, token.id)
-                tenant = None
-                for t in tenants:
-                    if t.id == data.get('tenant'):
-                        tenant = t
-            else:
-                # We are logging in without tenant
-                token = api.token_create_with_region(request,
-                                         '',
-                                         data['username'],
-                                         data['password'])
+        default_region = getattr(settings, 'SWIFT_DEFAULT_REGION', None)
+        if default_region and api.token_for_region(request, default_region):
+            request.session['region'] = default_region
 
-                # Unscoped token
-                request.session['unscoped_token'] = token.id
-
-                def get_first_tenant_for_user():
-                    tenants = api.tenant_list_for_token(request, token.id)
-                    return tenants[0] if len(tenants) else None
-
-                # Get the tenant list, and log in using first tenant
-                # FIXME (anthony): add tenant chooser here?
-                tenant = get_first_tenant_for_user()
-
-                # Abort if there are no valid tenants for this user
-                if not tenant:
-                    messages.error(request, 'No tenants present for user: %s' %
-                                            data['username'])
-                    return
-
-                # Create a token
-                token = api.token_create_scoped_with_token_and_region(request,
-                                         data.get('tenant', tenant.id),
-                                         token.id)
-
-            request.session['admin'] = is_admin(token)
-            request.session['serviceCatalog'] = token.serviceCatalog
-            if not request.session.get('defaultServiceCatalog'):
-                request.session['defaultServiceCatalog'] = token.serviceCatalog
-
-            LOG.info('Login form for user "%s". Service Catalog data:\n%s' %
-                     (data['username'], token.serviceCatalog))
-
-            request.session['tenant'] = tenant.name
-            request.session['tenant_id'] = tenant.id
-            request.session['token'] = token.id
-            request.session['user'] = data['username']
-
-            return shortcuts.redirect('dash_containers', tenant.id)
-
-        except api_exceptions.Unauthorized as e:
-            msg = 'Error authenticating: %s' % e.message
-            LOG.exception(msg)
-            messages.error(request, msg)
-        except api_exceptions.ApiException as e:
-            messages.error(request, 'Error authenticating with keystone: %s' %
-                                     e.message)
+        return retval
 
 
 class LoginWithTenant(Login):
-    username = forms.CharField(max_length="20",
+    username = forms.CharField(max_length="255",
                        widget=forms.TextInput(attrs={'readonly': 'readonly'}))
     tenant = forms.CharField(widget=forms.HiddenInput())
 
 class LoginWithRegion(Login):
-    username = forms.CharField(max_length="20",
+    username = forms.CharField(max_length="255",
                        widget=forms.TextInput(attrs={'readonly': 'readonly'}))
     region = forms.CharField(widget=forms.HiddenInput())
+
+    def handle(self, request, data):
+        return super(LoginWithRegion, self).handle(request, data)
 
 
 def login(request):
@@ -140,7 +97,18 @@ def switch_regions(request, region_name):
     form, handled = LoginWithRegion.maybe_handle(
             request, initial={'region' : region_name,
                               'username' : request.user.username})
+
+    tokens = request.session.get('token_for_region', {})
+    if tokens.has_key(region_name):
+        data = { 'username' : request.user.username,
+                 'region' : region_name }
+        retval =  util.auth_with_token(request, data, tokens.get(region_name), None, region_name, True)
+        if retval:
+            request.session['region'] = region_name
+            return retval
+
     if handled:
+        request.session['region'] = region_name
         return handled
 
     return shortcuts.render_to_response('switch_regions.html', {

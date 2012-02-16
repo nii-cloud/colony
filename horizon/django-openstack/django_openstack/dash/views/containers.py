@@ -23,6 +23,8 @@ Views for managing Swift containers.
 """
 import logging
 
+from urllib import unquote
+from urlparse import urlparse
 from django import template
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -33,11 +35,10 @@ from django_openstack import api
 from django_openstack import forms
 from django_openstack.acl import parse_acl, clean_acl
 
-from cloudfiles.errors import ContainerNotEmpty
+from cloudfiles.errors import ContainerNotEmpty, InvalidContainerName, ResponseError
 
 
 LOG = logging.getLogger('django_openstack.dash')
-
 
 class DeleteContainer(forms.SelfHandlingForm):
     container_name = forms.CharField(widget=forms.HiddenInput())
@@ -51,20 +52,70 @@ class DeleteContainer(forms.SelfHandlingForm):
                            data['container_name'])
             LOG.exception('Unable to delete container "%s".  Exception: "%s"' %
                       (data['container_name'], str(e)))
+        except ResponseError, e:
+            messages.error(request, 'Unable to delete container. \
+                       Perhaps you do not have right permission : %s'  % str(e))
         else:
             messages.info(request,
                       'Successfully deleted container: %s' % \
                       data['container_name'])
         return shortcuts.redirect(request.build_absolute_uri())
 
+class OtherContainer(forms.SelfHandlingForm):
+    storage_url = forms.CharField(widget=forms.HiddenInput(), required=False)
+    storage_urls = forms.ChoiceField(initial=1, widget=forms.Select, required=False)
+
+    def __init__(self, *args, **kwargs):
+        fields = kwargs.pop('storage_urls')
+        storage_url = kwargs.pop('storage_url')
+        super(OtherContainer, self).__init__(*args, **kwargs)
+        self.fields['storage_urls'].choices = [ (value, value) for value in fields ]
+        if storage_url:
+            self.fields['storage_urls'].initial = (storage_url, storage_url)
+
+    def handle(self, request, data):
+        storage_url = data['storage_url']
+        storage_urls = data['storage_urls']
+        if storage_url:
+            target_url = storage_url
+        elif storage_urls:
+            target_url = storage_urls
+        containers = []
+        try:
+            containers = api.swift_get_containers(request, target_url)
+            request.session['storage_url'] = target_url
+            if not request.session.get('storage_url_list', None):
+                request.session['storage_url_list'] =  set()
+            request.session['storage_url_list'].add(target_url)
+        except Exception, e:
+            msg = "Unable to retrieve containers from swift: %s" % str(e)
+            LOG.exception(msg)
+            messages.error(request, msg)
+            return shortcuts.redirect('dash_containers' , request.user.tenant_id)
+ 
+        return shortcuts.render_to_response(
+        'django_openstack/dash/containers/index.html', {
+            'containers': containers,
+            'storage_url_form' : self,
+            'storage_url' : storage_url
+        }, context_instance=template.RequestContext(request))
 
 class CreateContainer(forms.SelfHandlingForm):
     name = forms.CharField(max_length="255", label="Container Name",
            validators=[validators.MaxLengthValidator(255)])
 
     def handle(self, request, data):
-        api.swift_create_container(request, data['name'])
-        messages.success(request, "Container was successfully created.")
+        cont_name = data['name']
+        cont_name = cont_name.encode('utf-8')
+        cont_name = cont_name.replace('/', '%2F')
+        try:
+            api.swift_create_container(request, cont_name)
+            messages.success(request, "Container was successfully created.")
+        except InvalidContainerName as e:
+            messages.error(request, "Invalid Container Name %s" % str(e))
+        except Exception, e:
+            messages.error(request, 'Unable to create container. \
+                       Perhaps you do not have right permission : %s'  % str(e))
         return shortcuts.redirect("dash_containers", request.user.tenant_id)
 
 class ContainerMetaRemove(forms.SelfHandlingForm):
@@ -83,7 +134,10 @@ class ContainerMetaRemove(forms.SelfHandlingForm):
         else:
             hdrs = {}
             hdrs[header] = ''
-            api.swift_set_container_info(request, container_name, hdrs)
+            try:
+                api.swift_set_container_info(request, container_name, hdrs)
+            except ResponseError, e:
+                messages.error(request, 'Unable to remove metadata from container : %s' % str(e))
 
         return shortcuts.redirect(request.build_absolute_uri())
 
@@ -103,12 +157,24 @@ class ContainerMeta(forms.SelfHandlingForm):
         value = data['header_value']
         container_name = data['container_name']
 
+        try:
+           header.encode('ascii')
+           value.encode('ascii')
+        except UnicodeEncodeError, e:
+           messages.error(request, "Container metadata contains non-ASCII character %s" % str(e))
+           return shortcuts.redirect(request.build_absolute_uri())
+
         if not header.lower().startswith('x-container-meta'):
             messages.error(request, "Container metadata must begin with x-container-meta-")
-        else:
-            hdrs = {}
-            hdrs[header] = value
+            return shortcuts.redirect(request.build_absolute_uri())
+
+        hdrs = {}
+        hdrs[header] = value
+
+        try:
             api.swift_set_container_info(request, container_name, hdrs)
+        except Exception, e:
+            messages.error(request, 'Unable to setting Container Meta Information is failed: %s' % str(e))
 
         return shortcuts.redirect(request.build_absolute_uri())
 
@@ -139,7 +205,7 @@ class ContainerAclRemove(forms.SelfHandlingForm):
             refs, groups = parse_acl(acl)
         except ValueError, e:
             messages.error(request, 'ACL value is invalid %s' % str(e))
-            return
+            return None
 
         if header in groups:
             groups.remove(header)
@@ -147,15 +213,35 @@ class ContainerAclRemove(forms.SelfHandlingForm):
             refs.remove(header)
 
         # re-calcurate referer string
-        refs = map( lambda x: '.r:%s' % x, refs)
+        refs = map( lambda x: '.r:%s' % x.encode('utf-8'), refs)
+        LOG.debug('ref  %s' % refs)
 
+        tenant_name = request.user.tenant_name
+        LOG.debug('acl_type %s' % acl_type)
+        # check ACL
+        val = []
+        for each_acl in groups:
+            if each_acl.startswith(tenant_name):
+                val.append(True)
+            else:
+                val.append(False)
+        if not True in val and len(val) > 0:
+            messages.error(request, 'Removing Your ACL from this Container is not allowed unless other ACLs are deleted')
+            return
+            
+        #messages.error(request, refs)
         # set header
         hdrs = {}
         hdrs[type] = ','.join(groups + refs)
 
-        api.swift_set_container_info(request, container_name, hdrs)
+        LOG.debug('delete acl %s' % hdrs)
+        try:
+            api.swift_set_container_info(request, container_name, hdrs)
+        except Exception, e:
+            # TODO error message
+            messages.error(request, 'Removing Container Meta Information is failed: %s' % str(e))
 
-        return shortcuts.redirect(request.build_absolute_uri())
+        return None
 
 class ContainerAcl(forms.SelfHandlingForm):
     ''' Form that handles Swift Container Acl '''
@@ -170,9 +256,15 @@ class ContainerAcl(forms.SelfHandlingForm):
 
     def handle(self, request, data):
 
-
         container_name = data['container_name']
         acl_type = data['acl_type']
+        try:
+            acl_add = data['acl_add']
+            acl_add.encode('ascii')
+        except UnicodeEncodeError, e:
+            messages.error(request, "Container ACL contains non-ASCII \
+            character %s" % str(e))
+            return shortcuts.redirect(request.build_absolute_uri()) 
 
         if acl_type == "1":
            type = 'X-Container-Read'
@@ -184,14 +276,13 @@ class ContainerAcl(forms.SelfHandlingForm):
 
         # clean and parse acl
         try:
-            acl = clean_acl(type, data['acl_add'])
+            acl = clean_acl(type, acl_add)
             acl_orig = clean_acl(type, acl_value)
             ref_add, group_add = parse_acl(acl)
             ref_orig, group_orig = parse_acl(acl_orig)
         except ValueError, e:
             messages.error(request, 'ACL value is invalid %s' % str(e))
-            print str(e)
-            return
+            return None
 
         # duplicate check
         ref_add = list(set(ref_add))
@@ -212,15 +303,36 @@ class ContainerAcl(forms.SelfHandlingForm):
         group_result = group_orig + acl_result
         ref_result = acl_ref_result + ref_orig
         # re-calcurate referer string
-        refs_result = map( lambda x: '.r:%s' % x, ref_result)
+        ref_result = map( lambda x: '.r:%s' % x, ref_result)
+
+        tenant_name = request.user.tenant_name
+        LOG.debug('acl_type %s' % acl_type)
+        # check ACL
+        val = []
+        for each_acl in group_result:
+            if each_acl.startswith(tenant_name):
+                val.append(True)
+            else:
+                val.append(False)
+        LOG.debug('val %s' % val)
+        if not True in val:
+             messages.error(request, 'Adding ReadAcl or WriteACL for other account is not \
+             allowed unless Your Acl is allowed. Please add your Acl \
+             first (ex %s ' % request.user.tenant_name)
+             return None
 
         # set header
         hdrs = {}
         hdrs[type] = ','.join(group_result + ref_result)
 
-        api.swift_set_container_info(request, container_name, hdrs)
-       
-        return shortcuts.redirect(request.build_absolute_uri()) 
+        LOG.debug("sending ACL %s" % hdrs)
+        try:
+            api.swift_set_container_info(request, container_name, hdrs)
+        except Exception, e:
+            messages.error(request, 'Unable to set container acl : %s' % str(e))
+
+
+        return None       
 
 
 class MakePublicContainer(forms.SelfHandlingForm):
@@ -273,19 +385,34 @@ class MakePublicContainer(forms.SelfHandlingForm):
         if error:
            hdrs['X-Container-Meta-Web-Error'] = error
 
-        api.swift_set_container_info(request, container_name, hdrs)
+        try:
+            api.swift_set_container_info(request, container_name, hdrs)
+        except Exception, e:
+            messages.error(request, 'Unable to set container metadata for public : %s' % str(e))
+            return
 
-        return shortcuts.redirect("dash_containers", request.user.tenant_id)
+        messages.success(request, 'Successfully updated container metadata for public')
 
-@login_required
-def index(request, tenant_id):
+def _index(request, tenant_id, expire_session):
+
     delete_form, handled = DeleteContainer.maybe_handle(request)
     if handled:
         return handled
 
+    if expire_session and request.session.has_key('storage_url'):
+       print 'removing session'
+       del request.session['storage_url']
+    storage_urls = request.session.get('storage_url_list', [])
+    storage_url = request.session.get('storage_url', None)
+    storage_url_form, handled = OtherContainer.maybe_handle(request,
+                  storage_urls=storage_urls, storage_url=storage_url)
+    if handled:
+        return handled
+
+
     containers = []
     try:
-        containers = api.swift_get_containers(request)
+        containers = api.swift_get_containers(request, storage_url)
     except Exception, e:
         msg = "Unable to retrieve containers from swift: %s" % str(e)
         LOG.exception(msg)
@@ -295,8 +422,18 @@ def index(request, tenant_id):
     'django_openstack/dash/containers/index.html', {
         'containers': containers,
         'delete_form': delete_form,
+        'storage_url_form' : storage_url_form,
+        'storage_url' : storage_url
     }, context_instance=template.RequestContext(request))
 
+
+@login_required
+def index_storage_url(request, tenant_id):
+    return _index(request, tenant_id, False)
+
+@login_required
+def index(request, tenant_id):
+    return _index(request, tenant_id, True)
 
 @login_required
 def create(request, tenant_id):
@@ -311,8 +448,16 @@ def create(request, tenant_id):
 
 @login_required
 def public(request, tenant_id, container_name):
-    container = api.swift_get_container(request, container_name)
-    objects = [(o.name, o.name) for o in api.swift_get_objects(request, container_name)]
+
+
+    try:
+        container = api.swift_get_container(request, container_name)
+        objects = [(o.name, o.name) for o in api.swift_get_objects(request, container_name)]
+    except ResponseError, e:
+        messages.error(request, 'Unable to retrive container meta data for public. \
+                       Perhaps you do not have right permission : %s'  % str(e))
+        return shortcuts.redirect('dash_containers', tenant_id)
+
     form, handled = MakePublicContainer.maybe_handle(request, objects=objects, headers=container.headers)
     if handled:
         return handled
@@ -339,15 +484,22 @@ def meta(request, tenant_id, container_name):
     if handled:
         return handled
 
-    container = api.swift_get_container(request, container_name)
-    headers = []
-    for h, v in container.headers:
-        if h.startswith('x-container-meta'):
-             headers.append((h,v))
+    try:
+        container = api.swift_get_container(request, container_name)
+        headers = []
+        for h, v in container.headers:
+            if h.startswith('x-container-meta'):
+                headers.append((h,v))
+    except ResponseError, e:
+        messages.error(request, 'Unable to retrive container meta data. \
+                       Perhaps you do not have right permission : %s'  % str(e))
+        return shortcuts.redirect('dash_containers', tenant_id)
 
+    container_name_unquoted = unquote(container_name)
     return shortcuts.render_to_response(
     'django_openstack/dash/containers/meta.html', {
        'container_name' : container_name,
+       'container_name_unquoted' : container_name_unquoted,
        'headers' : headers,
        'meta_form' : form,
        'remove_form' : remove_form
@@ -364,8 +516,13 @@ def acl(request, tenant_id, container_name):
     remove_form, handled = ContainerAclRemove.maybe_handle(request)
     if handled:
         return handled
-
-    container = api.swift_get_container(request, container_name)
+   
+    try: 
+        container = api.swift_get_container(request, container_name)
+    except ResponseError, e:
+        messages.error(request, 'Unable to retrive ACL data. \
+                       Perhaps you do not have right permission : %s'  % str(e))
+        return shortcuts.redirect('dash_containers', tenant_id)
     read_ref, read_groups, write_ref, write_groups = [],[],[],[]
     read_acl, write_acl = '', ''
     for h,v in container.headers:
@@ -382,11 +539,9 @@ def acl(request, tenant_id, container_name):
     #if container.headers.get('x-container-write'):
     #   ref, groups = utils.parse_acl(container.headers.get('x-container-write'))
 
-    """
-    ref, groups = parse_acl('test:test,hoge,.r:*')
-    read_ref, read_groups = ref, groups 
-    write_ref, write_groups = ref, groups 
-    """
+    #ref, groups = parse_acl('test:test,hoge,.r:*')
+    #read_ref, read_groups = ref, groups 
+    #write_ref, write_groups = ref, groups 
 
     return shortcuts.render_to_response(
     'django_openstack/dash/containers/acl.html', {

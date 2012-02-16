@@ -29,7 +29,13 @@ def tenants(request):
         return {}
 
     try:
-        return {'tenants': api.token_list_tenants(request, request.user.token)}
+        try:
+            tenants = api.tenant_list_for_token_and_region(request, 
+                       api.token_for_region(request),
+                       request.session.get('region', None))
+        except api.ServiceCatalogException, e:
+            tenants = api.tenant_list_for_token(request, request.user.token)
+        return {'tenants': tenants }
     except api_exceptions.BadRequest, e:
         messages.error(request, "Unable to retrieve tenant list from\
                                   keystone: %s" % e.message)
@@ -69,3 +75,7 @@ def image_metadata_glance(request):
 
 def gakunin(request):
     return {'gakunin_configured' : settings.GAKUNIN_ENABLED }
+
+def swift_enable_access_to_other_account(request):
+    return {'swift_enable_other_account' : settings.SWIFT_ACCESS_OTHER_ACCOUNT_ENABLED }
+

@@ -81,6 +81,7 @@ urlpatterns += patterns('django_openstack.dash.views.snapshots',
 # Swift containers and objects.
 urlpatterns += patterns('django_openstack.dash.views.containers',
     url(CONTAINERS % '', 'index', name='dash_containers'),
+    url(CONTAINERS % 'index_storage_url', 'index_storage_url', name='dash_containers_storage_url'),
     url(CONTAINERS % 'create', 'create', name='dash_containers_create'),
     url(OBJECTS % 'public', 'public', name='dash_containers_public'),
     url(OBJECTS % 'acl', 'acl', name='dash_containers_acl'),

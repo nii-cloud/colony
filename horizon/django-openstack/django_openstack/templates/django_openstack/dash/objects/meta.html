@@ -7,13 +7,16 @@
 {% endblock %}
 
 {% block page_header %}
-  {% include "django_openstack/common/_page_header.html" with title="Object Metadata" %}
+  {% url dash_objects_meta request.user.tenant_id container_name|urlencode object_name|urlencode as refresh_link %}
+  {% include "django_openstack/common/_page_header.html" with title="Object Metadata" refresh_link=refresh_link searchable="true" %}
 {% endblock page_header %}
 
 {% block dash_main %}
 
   <div class="dash_block">
-  <h3 class="container_name"><span>Container:</span> {{container_name}} <span>Object:</span> {{object_name}}</h3>
+  <h3 class="container_name"><span>Container:</span> {{container_name_unquoted}} <span>Object:</span> {{object_name_unquoted}}
+  {% if request.session.storage_url %}(at {{request.session.storage_url}} ){% endif %}
+  </h3>
   <h3>Metadata:</h3>
 
   <table id="containers" class="wide">
@@ -36,7 +39,7 @@
   </table>
 
 
-     <h3>Add Metadata to Object: {{object_name}}:</h3>
+     <h3>Add Metadata to Object: {{object_name_unquoted }}:</h3>
      <p>
       {% include 'django_openstack/dash/objects/_meta.html' with form=meta_form greeting="HI" %}
      </p>
@@ -49,6 +52,7 @@
   <br />
   <br />
   <br />
+      <h3><a href="{% url dash_objects request.user.tenant_id container_name|urlencode %}">&lt;&lt; Return to objects list</a></h3>
   </div>
 
   <script>

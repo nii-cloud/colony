@@ -1,3 +1,11 @@
+{% if swift_enable_other_account %}
+<div>
+{% include "django_openstack/dash/containers/_storage_form.html" with form=storage_url_form %}
+</div>
+<br />
+<br />
+<br />
+{% endif %}
 <table id="containers" class="wide">
   <tr>
     <th>Name</th>
@@ -6,7 +14,7 @@
   </tr>
   {% for container in containers %}
   <tr class="{% cycle 'odd' 'even' %}">
-    <td>{{ container.name }}</td>
+    <td>{{ container.unquote_name }}</td>
     <td id="status">
       <ul>
         <li>Count: {{ container.object_count }} </li>
@@ -18,12 +26,15 @@
     </td>
     <td id="actions">
       <ul>
+        {% if not storage_url %}
         <li class="form" style="margin: 0" >{% include "django_openstack/dash/containers/_delete.html" with form=delete_form %}</li>
-        <li style="margin: 0"><a href="{% url dash_objects request.user.tenant_id container.name %}">List Objects</a></li>
-        <li style="margin: 0"><a href="{% url dash_objects_upload request.user.tenant_id container.name %}">Upload Object</a></li>
-        <li style="margin: 0"><a href="{% url dash_containers_public request.user.tenant_id container.name %}">PUBLIC</a></li>
-        <li style="margin: 0"><a href="{% url dash_containers_acl request.user.tenant_id container.name %}">ACL</a></li>
-        <li style="margin: 0"><a href="{% url dash_containers_meta request.user.tenant_id container.name %}">MetaData</a></li>
+        {% endif %}
+        <li style="margin: 0"><a href="{% url dash_objects request.user.tenant_id container.name|urlencode %}">List Objects</a></li>
+        <li style="margin: 0"><a href="{% url dash_objects_upload request.user.tenant_id container.name|urlencode %}">Upload Object</a></li>
+        {% if not storage_url %}
+        <li style="margin: 0"><a href="{% url dash_containers_public request.user.tenant_id container.name|urlencode %}">PUBLIC</a></li>
+        <li style="margin: 0"><a href="{% url dash_containers_acl request.user.tenant_id container.name|urlencode %}">ACL</a></li>
+        <li style="margin: 0"><a href="{% url dash_containers_meta request.user.tenant_id container.name|urlencode %}">MetaData</a></li        {% endif %}
       </ul>
     </td>
   </tr>

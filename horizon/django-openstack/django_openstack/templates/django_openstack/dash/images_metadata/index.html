@@ -13,12 +13,10 @@
 {% endblock page_header %}
 
 {% block dash_main %}
-  {% if images %}
     {% include 'django_openstack/dash/images_metadata/_list.html' %}
 
     <div class="dash_block wide form">
     <p>
     {% include 'django_openstack/dash/images_metadata/_upload_form.html' with form=upload_form %}
     </div>
-  {% endif %}
 {% endblock %}

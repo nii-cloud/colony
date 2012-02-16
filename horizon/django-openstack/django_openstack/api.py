@@ -33,9 +33,10 @@ shouldn't need to understand the finer details of APIs for Nova/Glance/Swift et
 al.
 """
 
+import httplib
 import time
 
-from urllib import quote
+from urllib import quote , unquote
 
 from django.conf import settings
 from django.contrib import messages
@@ -140,7 +141,15 @@ class APIDictWrapper(object):
 
 class Container(APIResourceWrapper):
     """Simple wrapper around cloudfiles.container.Container"""
-    _attrs = ['name', 'size_used', 'object_count', 'headers']
+    _attrs = ['name', 'unquote_name' , 'size_used', 'object_count', 'headers']
+
+    def __getattr__(self, attrname):
+        if attrname == "unquote_name":
+            unq_name = super(Container, self).__getattr__('name')
+            return unq_name.replace('%2F', '/')
+            #return unquote(moke)
+        else:
+            return super(Container, self).__getattr__(attrname)
 
 
 class Console(APIResourceWrapper):
@@ -232,7 +241,15 @@ class Services(APIResourceWrapper):
 
 
 class SwiftObject(APIResourceWrapper):
-    _attrs = ['name', 'content_type', 'metadata', 'size', 'last_modified']
+    _attrs = ['name', 'unquote_name', 'content_type', 'metadata', 'size', 'last_modified']
+
+    def __getattr__(self, attrname):
+        if attrname == "unquote_name":
+            unq_name = super(SwiftObject, self).__getattr__('name')
+            return unq_name.replace('%2F', '/')
+            #return unquote(moke)
+        else:
+            return super(SwiftObject, self).__getattr__(attrname)
 
 
 class Tenant(APIResourceWrapper):
@@ -317,32 +334,55 @@ def get_service_from_catalog(catalog, service_type):
                 return service
     return None
 
-def get_endpoint_index_by_region(request, service):
-    region = None
+def get_endpoint_index_by_region(request, service, region=None):
     try:
-        region = request.session['region']
+        if not region:
+            region = request.session['region']
     except (KeyError, AttributeError):
         pass
     if not region:
-        return 0
+        raise ServiceCatalogException('region not found')
     for i in range(len(service['endpoints'])):
         if service['endpoints'][i]['region'] == region:
             return i
-    raise ServiceCatalogException('region not found')
+    raise ServiceCatalogException('region %s is not found in service catalog' % region)
 		
 
-def url_for(request, service_type, admin=False):
-    catalog = request.user.service_catalog
+def token_for_region(request, region=None):
+    try:
+        if not region:
+            region = request.session.get('region')
+        LOG.info('token for region %s' % region)
+        return request.session['token_for_region'][region]
+    except KeyError, e:
+        LOG.info('token for region default')
+        #return request.session.get('token')
+        return None
+
+def url_for_with_slash(request, service_type, admin=False, region=None):
+    url = url_for(request, service_type, admin, region)
+    return url.rstrip('/') + '/'
+
+def url_for_with_no_slash(request, service_type, admin=False, region=None):
+    url = url_for(request, service_type, admin, region)
+    return url.rstrip('/')
+
+def url_for(request, service_type, admin=False, region=None):
+    if request.session.get('defaultServiceCatalog'):
+        catalog = request.session['defaultServiceCatalog']
+    elif request.session.get('serviceCatalog'):
+        catalog = request.session['serviceCatalog']
+    else:
+        catalog = request.user.service_catalog
     service = get_service_from_catalog(catalog, service_type)
     if service:
-        i = get_endpoint_index_by_region(request, service)
+        i = get_endpoint_index_by_region(request, service, region)
         try:
-            if getattr(request, 'session', None) and request.session.has_key('region'):
-                request.session['region'] = service['endpoints'][i]['region']
             if admin:
                 return service['endpoints'][i]['adminURL']
             else:
                 return service['endpoints'][i]['internalURL']
+
         except (IndexError, KeyError):
             raise ServiceCatalogException(service_type)
     else:
@@ -377,40 +417,40 @@ def check_openstackx(f):
 
 def compute_api(request):
     compute = openstack.compute.Compute(
-        auth_token=request.user.token,
+        auth_token=token_for_region(request),
         management_url=url_for(request, 'compute'))
     # this below hack is necessary to make the jacobian compute client work
     # TODO(mgius): It looks like this is unused now?
-    compute.client.auth_token = request.user.token
+    compute.client.auth_token = token_for_region(request)
     compute.client.management_url = url_for(request, 'compute')
     LOG.debug('compute_api connection created using token "%s"'
                       ' and url "%s"' %
-                      (request.user.token, url_for(request, 'compute')))
+                      (token_for_region(request), url_for(request, 'compute')))
     return compute
 
 
 def account_api(request):
     LOG.debug('account_api connection created using token "%s"'
                       ' and url "%s"' %
-                  (request.user.token,
-                   url_for(request, 'identity', True)))
+                  (token_for_region(request),
+                   url_for_with_no_slash(request, 'identity', True)))
     return openstackx.extras.Account(
-        auth_token=request.user.token,
-        management_url=url_for(request, 'identity', True))
+        auth_token=token_for_region(request),
+        management_url=url_for_with_no_slash(request, 'identity', True))
 
 
 def glance_api(request):
     o = urlparse(url_for(request, 'image'))
-    LOG.debug('glance_api connection created for host "%s:%d"' %
+    LOG.info('glance_api connection created for host "%s:%d"' %
                      (o.hostname, o.port))
-    return glance.client.Client(o.hostname, o.port, auth_tok=request.user.token)
+    return glance.client.Client(o.hostname, o.port, auth_tok=token_for_region(request))
 
 
 def admin_api(request):
-    LOG.debug('admin_api connection created using token "%s"'
+    LOG.info('admin_api connection created using token "%s"'
                     ' and url "%s"' %
-                    (request.user.token, url_for(request, 'compute', True)))
-    return openstackx.admin.Admin(auth_token=request.user.token,
+                    (token_for_region(request), url_for(request, 'compute', True)))
+    return openstackx.admin.Admin(auth_token=token_for_region(request),
                                  management_url=url_for(request, 'compute', True))
 
 def gakunin_api(request):
@@ -418,54 +458,61 @@ def gakunin_api(request):
         url = url_for(request, 'identity', True)
     except ServiceCatalogException, ex:
         url = settings.OPENSTACK_KEYSTONE_ADMIN_URL
-    LOG.debug('admin_api connection created using token "%s"'
+    LOG.info('admin_api connection created using token "%s"'
                     ' and url "%s"' %
                     (settings.KEYSTONE_ADMIN_TOKEN, url))
     return authext.AdminExt(auth_token=settings.KEYSTONE_ADMIN_TOKEN,
                                  management_url=url)
 
 def extras_api(request):
-    LOG.debug('extras_api connection created using token "%s"'
+
+    LOG.info('extras_api connection created using token "%s"'
                      ' and url "%s"' %
-                    (request.user.token, url_for(request, 'compute')))
-    return openstackx.extras.Extras(auth_token=request.user.token,
+                    (token_for_region(request), url_for(request, 'compute')))
+    return openstackx.extras.Extras(auth_token=token_for_region(request),
                                    management_url=url_for(request, 'compute'))
 
 
 def novaclient(request):
-    LOG.debug('novaclient connection created using token "%s"'
-              ' and url "%s"' % (request.user.token, url_for(request, 'compute')))
+    LOG.info('novaclient connection created using token "%s"'
+              ' and url "%s"' % (token_for_region(request), url_for(request, 'compute')))
     c = client.Client(username=request.user.username,
-                      api_key=request.user.token,
+                      api_key=token_for_region(request),
                       project_id=request.user.tenant_id,
                       auth_url=url_for(request, 'compute'))
-    c.client.auth_token = request.user.token
+    c.client.auth_token = token_for_region(request)
     c.client.management_url=url_for(request, 'compute')
     return c
 
 
-def auth_api_with_request(request):
+def auth_api_with_request(request, region=None):
     try:
-        url = url_for(request, 'auth')
+        url = url_for_with_no_slash(request, 'identity', False, region)
     except ServiceCatalogException, ex:
-        url = settings.OPENSTACK_KEYSTONE_URL
+        url = settings.OPENSTACK_KEYSTONE_URL.rstrip('/')
 
-    LOG.debug('auth_api_with_request using url %s' % url)
+    LOG.info('auth_api_with_request for region %s using url %s' % (region, url))
     return openstackx.auth.Auth(management_url=url)
 
 def auth_api():
-    LOG.debug('auth_api connection created using url "%s"' %
+    LOG.info('auth_api connection created using url "%s"' %
                    settings.OPENSTACK_KEYSTONE_URL)
     return openstackx.auth.Auth(
-            management_url=settings.OPENSTACK_KEYSTONE_URL)
+            management_url=settings.OPENSTACK_KEYSTONE_URL.rstrip('/') + '/')
 
 
-def swift_api(request):
-    LOG.debug('object store connection created using token "%s"'
-                ' and url "%s"' %
-                (request.session['token'], url_for(request, 'object-store')))
-    auth = SwiftAuthentication(url_for(request, 'object-store'),
-                               request.session['token'])
+def swift_api(request, url=None):
+
+    try:
+       target_url = url if url else url_for_with_no_slash(request, 'object-store')
+    except ServiceCatalogException, ex:
+       pass
+
+    LOG.info('object store connection created using token "%s"'
+                ' and url "%s" %s %s' %
+                (token_for_region(request), target_url, url, request.session.get('storage_url', None)))
+    auth = SwiftAuthentication(target_url,
+                               token_for_region(request))
     return cloudfiles.get_connection(auth=auth)
 
 
@@ -657,7 +704,7 @@ def service_update(request, name, enabled):
 
 
 def token_get_tenant(request, tenant_id):
-    tenants = auth_api().tenants.for_token(request.user.token)
+    tenants = auth_api().tenants.for_token(token_for_region(request))
     for t in tenants:
         if str(t.id) == str(tenant_id):
             return Tenant(t)
@@ -688,17 +735,25 @@ def tenant_list(request):
     return [Tenant(t) for t in account_api(request).tenants.list()]
 
 
+def tenant_list_for_token_and_region(request, token, region=None):
+
+    keystone =  openstackx.auth.Auth(
+            management_url=url_for_with_no_slash(request, 'identity', False, region)
+            )
+    return [Tenant(t) for t in keystone.tenants.for_token(token)]
+
 def tenant_list_for_token(request, token):
     # FIXME: use novaclient for this
     keystone =  openstackx.auth.Auth(
-            management_url=settings.OPENSTACK_KEYSTONE_URL)
+            management_url=settings.OPENSTACK_KEYSTONE_URL.rstrip('/') + '/')
     return [Tenant(t) for t in keystone.tenants.for_token(token)]
 
 
 def users_list_for_token_and_tenant(request, token, tenant):
     admin_account =  openstackx.extras.Account(
                      auth_token=token,
-                     management_url=url_for(request, 'identity', True))
+                     management_url=url_for_with_no_slash(request, 'identity', True))
+    LOG.info('users_list_for_tokan_and_tenant %s' % tenant)
     return [User(u) for u in admin_account.users.get_for_tenant(tenant)]
 
 
@@ -721,11 +776,11 @@ def token_create(request, tenant, username, password):
 def token_create_scoped_with_token(request, tenant, token):
     return Token(auth_api().tokens.create_scoped_with_token(tenant, token))
 
-def token_create_with_region(request, tenant, username, password):
-    return Token(auth_api_with_request(request).tokens.create(tenant, username, password))
+def token_create_with_region(request, tenant, username, password, region=None):
+    return Token(auth_api_with_request(request, region).tokens.create(tenant, username, password))
 
-def token_create_scoped_with_token_and_region(request, tenant, token):
-    return Token(auth_api_with_request(request).tokens.create_scoped_with_token(tenant, token))
+def token_create_scoped_with_token_and_region(request, tenant, token, region=None):
+    return Token(auth_api_with_request(request, region).tokens.create_scoped_with_token(tenant, token))
 
 def tenant_quota_get(request, tenant):
     return novaclient(request).quotas.get(tenant)
@@ -835,16 +890,16 @@ def role_delete_for_tenant_user(request, tenant_id, user_id, role_name):
                 role.id)
 
 
-def swift_container_exists(request, container_name):
+def swift_container_exists(request, container_name, storage_url=None):
     try:
-        swift_api(request).get_container(container_name)
+        swift_api(request, storage_url).get_container(container_name)
         return True
     except cloudfiles.errors.NoSuchContainer:
         return False
 
 
-def swift_object_exists(request, container_name, object_name):
-    container = swift_api(request).get_container(container_name)
+def swift_object_exists(request, container_name, object_name, storage_url=None):
+    container = swift_api(request, storage_url).get_container(container_name)
 
     try:
         container.get_object(object_name)
@@ -853,12 +908,13 @@ def swift_object_exists(request, container_name, object_name):
         return False
 
 
-def swift_get_containers(request):
-    return [Container(c) for c in swift_api(request).get_all_containers()]
+def swift_get_containers(request, storage_url=None):
+    return [Container(c) for c in swift_api(request, storage_url).get_all_containers()]
 
-def swift_get_container(request, name):
-    swift_api(request)._check_container_name(name)
-    response = swift_api(request).make_request('HEAD', [ name ] )
+def swift_get_container(request, name, storage_url=None):
+    swift_api(request, storage_url)._check_container_name(name)
+
+    response = swift_api(request, storage_url).make_request('HEAD', [ name ] )
     count = size = None
     headers = response.getheaders()
     for hdr in headers:
@@ -874,11 +930,11 @@ def swift_get_container(request, name):
                 size = 0
     buff = response.read()
     if response.status == 404:
-        raise NoSuchContainer(name)
+        raise cloudfiles.errors.NoSuchContainer(name)
     if (response.status < 200) or (response.status > 299):
-        raise ResponseError(response.status, response.reason)
+        raise cloudfiles.errors.ResponseError(response.status, response.reason)
 
-    c = cloudfiles.container.Container(swift_api(request), name, count, size)
+    c = cloudfiles.container.Container(swift_api(request, storage_url), name, count, size)
     c.headers = headers
 
     return Container(c)
@@ -886,6 +942,7 @@ def swift_get_container(request, name):
 
 def swift_set_container_info(request, name, hdrs):
 
+    LOG.info('sending container info %s' % hdrs)
     response = swift_api(request).make_request('POST', [ name ], data='', hdrs=hdrs)
     buff = response.read()
 
@@ -893,86 +950,121 @@ def swift_set_container_info(request, name, hdrs):
        raise Exception('set Container info for %s failed.' % (name))
     return True
 
-def swift_create_container(request, name):
-    if swift_container_exists(request, name):
+def swift_create_container(request, name, storage_url=None):
+    if swift_container_exists(request, name, storage_url):
         raise Exception('Container with name %s already exists.' % (name))
 
     return Container(swift_api(request).create_container(name))
 
 
-def swift_delete_container(request, name):
-    swift_api(request).delete_container(name)
+def swift_delete_container(request, name, storage_url=None):
+    swift_api(request, storage_url).delete_container(name)
 
 
-def swift_get_objects(request, container_name, prefix=None):
-    container = swift_api(request).get_container(container_name)
+def swift_get_objects(request, container_name, prefix=None, storage_url=None):
+    LOG.info('target url for get object %s' % storage_url)
+    container = swift_api(request, storage_url).get_container(container_name)
     return [SwiftObject(o) for o in container.get_objects(prefix=prefix)]
 
 
 def swift_copy_object(request, orig_container_name, orig_object_name,
-                      new_container_name, new_object_name):
+                      new_container_name, new_object_name, storage_url=None):
 
-    container = swift_api(request).get_container(orig_container_name)
+    container = swift_api(request, storage_url).get_container(orig_container_name.replace('/', '%2F'))
 
     if swift_object_exists(request,
-                           new_container_name,
-                           new_object_name) == True:
+                           new_container_name.replace('/', '%2F'),
+                           new_object_name.replace('/', '%2F'),
+                           storage_url) == True:
         raise Exception('Object with name %s already exists in container %s'
         % (new_object_name, new_container_name))
 
-    orig_obj = container.get_object(orig_object_name)
+    orig_obj = container.get_object(orig_object_name.replace('/', '%2F'))
+
+    # dirty hack 
+    '''
+    swift_url = url_for_with_no_slash(request, 'object-store', False)
+
+    swift_parsed = urlparse(swift_url)
+    # should try cathe
+    connect = httplib.HTTPConnection if swift_url.startswith('http://') else httplib.HTTPSConnection
+    #conn = connect(swift_parsed, timeout=10)
+    conn = connect(swift_parsed, timeout=10)
+    headers = {}
+    headers['Destination'] = "%s/%s" % (new_container_name.replace('/', '%2F') , new_object_name('/', '%2F'))
+    headers['Content-Length'] = "0"
+    target_url = '%s/%s' % (quote(new_container_name, ''), quote(new_object_name, ''))
+    conn.request('COPY', swift_url, None, headers)
+
+    response = conn.getresponse()
+
+    if response.status_int == 201:
+        return True
+    '''
+    # re-unquote
+    LOG.info('copy object %s %s %s %s' % (orig_container_name,orig_object_name,new_container_name,new_object_name))
+    new_container_name = quote(new_container_name, '/')
+    new_object_name = quote(new_object_name, '/')
+
     return orig_obj.copy_to(new_container_name, new_object_name)
 
 
-def swift_upload_object(request, container_name, object_name, object_data):
-    container = swift_api(request).get_container(container_name)
+def swift_upload_object(request, container_name, object_name, object_data, storage_url=None):
+    container = swift_api(request, storage_url).get_container(container_name)
     obj = container.create_object(object_name)
-    obj.write(object_data)
+    obj.content_type = object_data.content_type
+    if object_data.multiple_chunks():
+        for buf in object_data.chunks(settings.SWIFT_LARGE_OBJECT_CHUNK_SIZE):
+            obj.write(buf)
+    else:
+        obj.write(object_data.read())
 
-def swift_upload_object_with_manifest(request, container_name, object_name, object_data):
+def swift_upload_object_with_manifest(request, container_name, object_name, object_data, storage_url=None):
 
-    if object_data.size < settings.SWIFT_LARGE_OBJECT_SIZE:
-        return swift_upload_object(request, container_name, object_name, object_data.read())
+    if object_data.size < settings.SWIFT_LARGE_OBJECT_SIZE or not object_data.multiple_chunks():
+        return swift_upload_object(request, container_name, object_name, object_data, storage_url)
 
     seq_cont = container_name + '_segments'
-    c = swift_api(request).create_container(seq_cont)
-    container = swift_api(request).get_container(container_name)
+    c = swift_api(request, storage_url).create_container(seq_cont)
+    container = swift_api(request, storage_url).get_container(container_name)
     seq = 0
     file_time = time.time()
     for buf in object_data.chunks(settings.SWIFT_LARGE_OBJECT_CHUNK_SIZE):
+        LOG.info('upload seq %d' % seq)
         path = '%s/%s/%s/%08d' % (object_name, file_time, object_data.size, seq)
         path = quote(path, '')
         obj = c.create_object(path)
         obj.write(buf)
-        ++seq
+        seq = seq + 1
     manifest_obj = container.create_object(object_name)
+    manifest_obj.content_type = object_data.content_type
     objpath= '%s/%s/%s' % (object_name, file_time, object_data.size)
     manifest_obj.manifest = '%s/%s' % (seq_cont, quote(objpath, ''))
     manifest_obj.sync_manifest()
 
 
-def swift_delete_object(request, container_name, object_name):
-    container = swift_api(request).get_container(container_name)
+def swift_delete_object(request, container_name, object_name, storage_url=None):
+    container = swift_api(request, storage_url).get_container(container_name)
     container.delete_object(object_name)
 
 
-def swift_get_object_data(request, container_name, object_name):
-    container = swift_api(request).get_container(container_name)
+def swift_get_object_data(request, container_name, object_name, storage_url=None):
+    container = swift_api(request, storage_url).get_container(container_name)
     return container.get_object(object_name).stream()
 
-def swift_set_object_info(request, container_name, object_name, meta):
-    container = swift_api(request).get_container(container_name)
+def swift_set_object_info(request, container_name, object_name, meta, storage_url=None):
+    container = swift_api(request, storage_url).get_container(container_name)
     object = container.get_object(object_name)
     object.metadata.update(meta)
     object.sync_metadata()
 
-def swift_get_object_info(request, container_name, object_name):
-    container = swift_api(request).get_container(container_name)
+def swift_get_object_info(request, container_name, object_name, storage_url=None):
+    container = swift_api(request, storage_url).get_container(container_name)
     object = container.get_object(object_name)
     return object.metadata
 
-def swift_remove_object_info(request, container_name, object_name, meta):
-    container = swift_api(request).get_container(container_name)
+def swift_remove_object_info(request, container_name, object_name, meta, storage_url=None):
+    container = swift_api(request, storage_url).get_container(container_name)
     object = container.get_object(object_name)
     for key, value in meta.iteritems():
         try:
@@ -980,8 +1072,8 @@ def swift_remove_object_info(request, container_name, object_name, meta):
         except KeyError:
             pass
     if not object.metadata:
-       # FIXME added dummy attr
-       object.metadata[''] = ''
+        raise Exception('Removing All Object Metadata cannot be requestd due to Swift API')
+
     object.sync_metadata()
     
 def quantum_list_networks(request):

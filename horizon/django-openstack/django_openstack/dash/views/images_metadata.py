@@ -104,31 +104,67 @@ class UploadMetadata(forms.SelfHandlingForm):
     image_meta_file = forms.FileField(label="Image Metadata File", required=True)
 
     def handle(self, request, data):
+
+        if self.files['image_meta_file'].size > 1024 * 1024 * 256:
+            messages.error(request, 'Metadata content is too big (more than 256MB)')
+
         data = self.files['image_meta_file'].read()
 
         try:
             root = etree.XML(data)
         except etree.XMLSyntaxError, e:
-            messages.error(request, 'Metadata content is invalid')
+            messages.error(request, 'Metadata content is invalid %s' % str(e))
             return
 
         image = {}
 
-        image['name'] = root.findtext("name")
-        image['location'] = root.findtext("location")
+        name = root.findtext("name")
+        if not name:
+            messages.error(request, 'Metadata content does not have Image name')
+            return 
+        image['name'] = name
+        location = root.findtext('location')
+        if location:
+            image['location'] = location
         image['is_public'] = True
         image['owner'] = request.user.username
-        disk_format = root.findtext("format/disk")
-        container_format = root.findtext("format/container")
-        min_disk = root.findtext("info/min_disk")
-        min_ram = root.findtext("info/min_ram")
 
+        meta = {}
+        meta['disk_format'] = root.findtext("format/disk")
+        meta['container_format'] = root.findtext("format/container")
+        meta['size'] = root.findtext("info/size")
+        meta['min_disk'] = root.findtext("info/min_disk")
+        meta['min_ram'] = root.findtext("info/min_ram")
+        properties = root.find("info/properties")
+
+        # property
+        prop = {}
+        if properties is not None:
+            for property in properties.getchildren():
+                name = property.findtext('name')
+                value = property.findtext('value')
+                prop[name] = value
+        meta['properties'] = prop
+
+        meta_send = {}
+        for key,value in meta.iteritems():
+            if not value:
+               continue
+            meta_send[key] = value
+        LOG.info('sending meta %s' % meta_send) 
         try:
-            api.image_create(request, image, None)
+            upload_image = api.image_create(request, image, None)
+            try:
+                update_image = api.image_update(request, upload_image.id , meta_send)
+            except glance_exception.Invalid as e:
+                messages.error(request, 'Image Metadata has invalid data %s' % str(e))
+                update_image = api.image_update(request, upload_image.id, { 'location' : '' })
+                api.image_delete(request, upload_image.id)
+                return shortcuts.redirect(request.build_absolute_uri())
             messages.success(request, "Image Metadata was successfully registerd")
         except glance_exception.BadStoreUri as e:
-            messages.error(request, 'hogehoge %s' % str(e))
-        
+            messages.error(request, 'Metadata has bad location %s' % str(e))
+
         return shortcuts.redirect(request.build_absolute_uri())
 
 # utility
@@ -139,6 +175,16 @@ def _parse_location(url):
        location = location[1:].split(']')[0]
     return image_loc.scheme, location, image_loc.path
 
+def _parse_user(url):
+    image_loc = urlparse.urlparse(url)
+    creds = image_loc.netloc.split('@', 1)[0]
+    creds_list = creds.split(':')
+    if len(creds_list) == 1:
+        return ''.join(creds_list)
+    elif len(creds_list) == 2:
+        return creds_list[0]
+    elif len(creds_list) == 3:
+        return ':'.join(creds_list[0:1])
 
 @login_required
 def index(request, tenant_id):
@@ -225,8 +271,8 @@ def download(request, tenant_id, image_id):
             <disk>%s</disk>
             <container>%s</container>
           </format>
-          <size>%s</size>
           <info>
+              <size>%s</size>
               <min_disk>%s</min_disk>
               <min_ram>%s</min_ram>
               <properties>
@@ -235,7 +281,9 @@ def download(request, tenant_id, image_id):
           </info>
         </image>
         """ % (image.name, "%s://%s%s" % (scheme,location, path), 
-               image.disk_format, image.container_format, image.size, 
+               image.disk_format if image.disk_format else '',
+               image.container_format if image.container_format else '',
+               image.size, 
                image.min_disk, image.min_ram, ''.join(property_value))
     except AttributeError as e:
         messages.error(request, 
@@ -266,7 +314,7 @@ def update(request, tenant_id, image_id):
                  'image_id': image_id,
                  'name': image.get('name', ''),
                  'location' : '%s://%s%s' % ( scheme, location, path),
-                 'user': request.user.username,
+                 'user': _parse_user(image.location),
                  'password' : '',
                  })
     if handled:
