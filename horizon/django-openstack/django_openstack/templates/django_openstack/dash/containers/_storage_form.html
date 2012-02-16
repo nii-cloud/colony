@@ -1,0 +1,9 @@
+<form id="storage_form"  method="post" align="right">
+  {% csrf_token %}
+  {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+    {% for field in form.visible_fields %}
+    {{ field.label_tag }}
+    {{ field }}
+  {% endfor %}
+  <a class="refresh" onclick="$('#id_storage_form').submit()" href=""></a>
+</form>
