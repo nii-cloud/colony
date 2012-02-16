@@ -824,6 +824,7 @@ input:focus, textarea:focus {
 }
 
 #storage_form {
+  width=80%;
   margin: 0 0 0 0;
   float: right;
 }
@@ -831,6 +832,11 @@ input:focus, textarea:focus {
 #storage_form select {
   color: green;
   margin: 5px 0 0 0;
+}
+
+#storage_form input {
+  height: 36px;
+  width: 450px;
 }
 
 #storage_form a  {
