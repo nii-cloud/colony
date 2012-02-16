@@ -823,6 +823,27 @@ input:focus, textarea:focus {
   padding: 20px 20px 20px 20px;
 }
 
+#storage_form {
+  margin: 0 0 0 0;
+  float: right;
+}
+
+#storage_form select {
+  color: green;
+  margin: 5px 0 0 0;
+}
+
+#storage_form a  {
+  background: url(../images/refresh.png) top left no-repeat;
+  text-indent: -9999px;
+  width: 24px;
+  height: 24px;
+  float: right;
+  display: block;
+  cursor: pointer;
+}
+
+#storege_form a:hover { background-position: left -24px; }
 
 /* Login Page */
 
@@ -859,12 +880,28 @@ input:focus, textarea:focus {
 #standalone #login_wrapper h2 { min-width: 65px; }
 #standalone #login_wrapper p { width: 183px; }
 
+
 #login form { float: left; }
 
+/*
 #login label {
   clear: both;
   margin-bottom: 10px;
   float: left;
+}
+*/
+
+#login label {
+   width: 100%;
+   clear: both;
+   margin: 0 0 5px 0;
+   float: left;
+}
+
+
+#login form .errorlist {
+  color: #ff5c5f;
+  font-size: 11px;
 }
 
 input[readonly="readonly"] {
