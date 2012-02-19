@@ -126,18 +126,11 @@
 {% endblock page_header %}
 
 {% block dash_main %}
-   <div>
   {% include 'django_openstack/dash/containers/_list.html' %}
-  </div>
   {%if not storage_url %}
   <a class="action_link large-rounded" href="{% url dash_containers_create request.user.tenant_id %}">Create New Container &gt;&gt;</a>
   {% endif %}
 {% if swift_enable_access_other_account %}
-      <style>
-    .ui-button { margin: -1px 0 0 0; }
-    .ui-button-icon-only .ui-button-text { padding: 0.41em; } 
-    .ui-autocomplete-input { margin: 0; padding: 0.48em 0 0.47em 0.45em; }
-    </style>
 {% endif %}
 
 {% endblock %}

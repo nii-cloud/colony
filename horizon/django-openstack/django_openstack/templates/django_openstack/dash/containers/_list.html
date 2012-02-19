@@ -8,14 +8,14 @@
 {% endif %}
 <table id="containers" class="wide">
   <tr>
-    <th>Name</th>
-    <th>Status</th>
-    <th>Actions</th>
+    <th id="name">Name</th>
+    <th id="status">Status</th>
+    <th id="actions">Actions</th>
   </tr>
   {% for container in containers %}
   <tr class="{% cycle 'odd' 'even' %}">
-    <td>{{ container.unquote_name }}</td>
-    <td id="status">
+    <td id="container" width="70%">{{ container.unquote_name }}</td>
+    <td id="status" width="20%">
       <ul>
         <li>Count: {{ container.object_count }} </li>
         <li>Size: {{ container.size_used|filesizeformat }} </li>
@@ -24,7 +24,7 @@
         {% endfor %}
       </ul>
     </td>
-    <td id="actions">
+    <td id="actions" width="10%">
       <ul>
         {% if not storage_url %}
         <li class="form" style="margin: 0" >{% include "django_openstack/dash/containers/_delete.html" with form=delete_form %}</li>
