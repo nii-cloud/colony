@@ -94,8 +94,6 @@ urlpatterns += patterns('django_openstack.dash.views.objects',
     url(OBJECTS % 'upload', 'upload', name='dash_objects_upload'),
     url(OBJECTS % '(?P<object_name>[^/]+)/copy',
         'copy', name='dash_object_copy'),
-    url(OBJECTS % '(?P<object_name>[^/]+)/download',
-        'download', name='dash_objects_download'),
     url(OBJECTS % '(?P<object_name>[^/]+)/meta',
         'meta', name='dash_objects_meta'),
 )

@@ -106,6 +106,29 @@ class UploadObject(forms.SelfHandlingForm):
 
         return None
 
+class DownloadObject(forms.SelfHandlingForm):
+    object_name = forms.CharField(widget=forms.HiddenInput())
+    container_name = forms.CharField(widget=forms.HiddenInput())
+    content_type = forms.CharField(widget=forms.HiddenInput())
+
+    def handle(self, request, data):
+        try:
+            container_name = data['container_name']
+            object_name = data['object_name']
+            content_type = data['content_type']
+            object_data = api.swift_get_object_data(
+                    request, container_name, object_name,
+                                   request.session.get('storage_url', None))
+            response = http.HttpResponse()
+            response['Content-Disposition'] = 'attachment; filename=%s' % \
+                    object_name.encode('utf-8')
+            response['Content-Type'] = content_type
+            for data in object_data:
+                response.write(data)
+            return response
+        except NoSuchObject, e:
+            messages.error('Error occurs in downloading object %s' % str(e))
+ 
 
 class CopyObject(forms.SelfHandlingForm):
     new_container_name = forms.ChoiceField(
@@ -223,6 +246,10 @@ def index(request, tenant_id, container_name):
     if handled:
         return handled
 
+    download_form, handled = DownloadObject.maybe_handle(request)
+    if handled:
+        return handled
+
     filter_form, objects = FilterObjects.maybe_handle(request)
     container_name_unquoted = unquote(container_name)
 
@@ -243,6 +270,7 @@ def index(request, tenant_id, container_name):
         'container_name_unquoted': container_name_unquoted,
         'objects': objects,
         'delete_form': delete_form,
+        'download_form' : download_form,
         'filter_form': filter_form,
     }, context_instance=template.RequestContext(request))
 
@@ -261,26 +289,6 @@ def upload(request, tenant_id, container_name):
         'container_name_unquoted': container_name_unquoted,
         'upload_form': form,
     }, context_instance=template.RequestContext(request))
-
-
-@login_required
-def download(request, tenant_id, container_name, object_name):
-
-    try:
-        object_data = api.swift_get_object_data(
-                request, container_name, object_name,
-                               request.session.get('storage_url', None))
-    except NoSuchObject, e:
-        messages.error('Error occurs in downloading object %s' % str(e))
-        request.redirect('dash_objects', tenant_id, container_name)
-
-    response = http.HttpResponse()
-    response['Content-Disposition'] = 'attachment; filename=%s' % \
-            object_name.encode('utf-8')
-    for data in object_data:
-        response.write(data)
-    return response
-
 
 @login_required
 def copy(request, tenant_id, container_name, object_name):
