@@ -17,10 +17,10 @@
     <td id="actions">
       <ul>
       <ul>
-        <li style="margin: 0"><a href="{% url dash_object_copy request.user.tenant_id container_name|urlencode object.name|urlencode %}">Copy</a></li>
+        <li style="margin: 0"><a href="{% url dash_object_copy request.user.tenant_id container_name|urlencode object.name|urlencode:"" %}">Copy</a></li>
         <li style="margin: 0" class="form">{% include "django_openstack/dash/objects/_delete.html" with form=delete_form %}</li>
         <li style="margin: 0" class="form">{% include "django_openstack/dash/objects/_download.html" with form=download_form %}</li>
-        <li style="margin: 0"><a href="{% url dash_objects_meta request.user.tenant_id container_name|urlencode object.name|urlencode %}">Metadata</a>
+        <li style="margin: 0"><a href="{% url dash_objects_meta request.user.tenant_id container_name|urlencode object.name|urlencode:"" %}">Metadata</a>
       </ul> 
     </td>
   </tr>
