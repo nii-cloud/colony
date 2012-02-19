@@ -487,7 +487,7 @@ def novaclient(request):
 
 def auth_api_with_request(request, region=None):
     try:
-        url = url_for_with_no_slash(request, 'identity', False, region)
+        url = url_for_with_slash(request, 'identity', False, region)
     except ServiceCatalogException, ex:
         url = settings.OPENSTACK_KEYSTONE_URL.rstrip('/')
 
@@ -499,6 +499,13 @@ def auth_api():
                    settings.OPENSTACK_KEYSTONE_URL)
     return openstackx.auth.Auth(
             management_url=settings.OPENSTACK_KEYSTONE_URL.rstrip('/') + '/')
+
+def swift_get_endpoint_by_account(request, account, url=None):
+
+    target_url = url if url else url_for_with_no_slash(request, 'object-store')
+    account_prefix = getattr(settings, 'SWIFT_ACCOUNT_PREFIX', None)
+    account = account_prefix if account_prefix else '/AUTH_'
+    split_url = target_url.split(account)
 
 
 def swift_api(request, url=None):
@@ -738,7 +745,7 @@ def tenant_list(request):
 def tenant_list_for_token_and_region(request, token, region=None):
 
     keystone =  openstackx.auth.Auth(
-            management_url=url_for_with_no_slash(request, 'identity', False, region)
+            management_url=url_for_with_slash(request, 'identity', False, region)
             )
     return [Tenant(t) for t in keystone.tenants.for_token(token)]
 
@@ -751,7 +758,7 @@ def tenant_list_for_token(request, token):
 
 def users_list_for_token_and_tenant(request, token, tenant):
     admin_account =  openstackx.extras.Account(
-                     auth_token=token,
+                     auth_token=token_for_region(request),
                      management_url=url_for_with_no_slash(request, 'identity', True))
     LOG.info('users_list_for_tokan_and_tenant %s' % tenant)
     return [User(u) for u in admin_account.users.get_for_tenant(tenant)]
@@ -966,11 +973,10 @@ def swift_get_objects(request, container_name, prefix=None, storage_url=None):
     container = swift_api(request, storage_url).get_container(container_name)
     return [SwiftObject(o) for o in container.get_objects(prefix=prefix)]
 
-
 def swift_copy_object(request, orig_container_name, orig_object_name,
                       new_container_name, new_object_name, storage_url=None):
 
-    container = swift_api(request, storage_url).get_container(orig_container_name.replace('/', '%2F'))
+    container = swift_api(request, storage_url).get_container(new_container_name.replace('/', '%2F'))
 
     if swift_object_exists(request,
                            new_container_name.replace('/', '%2F'),
@@ -979,35 +985,12 @@ def swift_copy_object(request, orig_container_name, orig_object_name,
         raise Exception('Object with name %s already exists in container %s'
         % (new_object_name, new_container_name))
 
-    orig_obj = container.get_object(orig_object_name.replace('/', '%2F'))
+    new_obj = container.create_object(new_object_name.replace('/', '%2F'))
 
-    # dirty hack 
-    '''
-    swift_url = url_for_with_no_slash(request, 'object-store', False)
+    orig_container_name = orig_container_name.replace('/', '%2F')
+    orig_object_name = orig_object_name.replace('/', '%2F')
 
-    swift_parsed = urlparse(swift_url)
-    # should try cathe
-    connect = httplib.HTTPConnection if swift_url.startswith('http://') else httplib.HTTPSConnection
-    #conn = connect(swift_parsed, timeout=10)
-    conn = connect(swift_parsed, timeout=10)
-    headers = {}
-    headers['Destination'] = "%s/%s" % (new_container_name.replace('/', '%2F') , new_object_name('/', '%2F'))
-    headers['Content-Length'] = "0"
-    target_url = '%s/%s' % (quote(new_container_name, ''), quote(new_object_name, ''))
-    conn.request('COPY', swift_url, None, headers)
-
-    response = conn.getresponse()
-
-    if response.status_int == 201:
-        return True
-    '''
-    # re-unquote
-    LOG.info('copy object %s %s %s %s' % (orig_container_name,orig_object_name,new_container_name,new_object_name))
-    new_container_name = quote(new_container_name, '/')
-    new_object_name = quote(new_object_name, '/')
-
-    return orig_obj.copy_to(new_container_name, new_object_name)
-
+    return new_obj.copy_from(orig_container_name, orig_object_name)
 
 def swift_upload_object(request, container_name, object_name, object_data, storage_url=None):
     container = swift_api(request, storage_url).get_container(container_name)
@@ -1036,10 +1019,13 @@ def swift_upload_object_with_manifest(request, container_name, object_name, obje
         obj = c.create_object(path)
         obj.write(buf)
         seq = seq + 1
+
     manifest_obj = container.create_object(object_name)
     manifest_obj.content_type = object_data.content_type
+    manifest_obj.size = object_data.size
     objpath= '%s/%s/%s' % (object_name, file_time, object_data.size)
     manifest_obj.manifest = '%s/%s' % (seq_cont, quote(objpath, ''))
+    LOG.info('manifest %s/%s' % (seq_cont, quote(objpath, '')))
     manifest_obj.sync_manifest()
 
 
