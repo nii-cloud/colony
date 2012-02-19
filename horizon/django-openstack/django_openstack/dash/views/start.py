@@ -19,25 +19,22 @@
 #    under the License.
 
 """
-Views for home page.
+Views for managing Swift containers.
 """
+import logging
+
+from urllib import unquote
+from urlparse import urlparse
 from django import template
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django import shortcuts
-from django.views.decorators import vary
+from django.core import validators
 
-from django_openstack import api
-from django_openstack.auth import views as auth_views
+LOG = logging.getLogger('django_openstack.dash')
 
-
-@vary.vary_on_cookie
-def splash(request):
-    if request.user:
-        return shortcuts.redirect('dash_startup')
-
-    form, handled = auth_views.Login.maybe_handle(request)
-    if handled:
-        return handled
-
-    return shortcuts.render_to_response('splash.html', {
-        'form': form,
+@login_required
+def index(request):
+    return shortcuts.render_to_response(
+    'django_openstack/dash/start.html', {
     }, context_instance=template.RequestContext(request))
