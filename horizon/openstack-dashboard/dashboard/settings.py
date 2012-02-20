@@ -72,7 +72,7 @@ TEMPLATE_CONTEXT_PROCESSORS = (
     'django_openstack.context_processors.image_metadata_glance',
     'django_openstack.context_processors.compute',
     'django_openstack.context_processors.gakunin',
-    'django_openstack.context_processors.swift_enable_other_account'
+    'django_openstack.context_processors.swift_enable_access_to_other_account'
 )
 
 TEMPLATE_LOADERS = (

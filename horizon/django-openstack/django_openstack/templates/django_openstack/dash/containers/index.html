@@ -6,7 +6,7 @@
   {% endwith %}
 {% endblock %}
 
-{% if swift_enable_access_other_account %}
+{% if swift_enable_other_account %}
 {% block headerjs %}
    <script type="text/javascript" charset="utf-8">
       (function( $ ) {
@@ -130,8 +130,6 @@
   {%if not storage_url %}
   <a class="action_link large-rounded" href="{% url dash_containers_create request.user.tenant_id %}">Create New Container &gt;&gt;</a>
   {% endif %}
-{% if swift_enable_access_other_account %}
-{% endif %}
 
 {% endblock %}
 

@@ -372,7 +372,6 @@ label.refreshOption {
   padding: 20px 20px 20px 20px;
 }
 
-
 /* Tables */
 
 .table_title {
@@ -986,6 +985,7 @@ input[readonly="readonly"] {
 h3.container_name {
   font-size: 24px;
   margin: 0 0 25px 0 ;
+  word-wrap: break-word;
 }
 
 h3 span, .left h3 { color: #6a6a6a; }
