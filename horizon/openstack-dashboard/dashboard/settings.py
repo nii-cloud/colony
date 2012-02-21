@@ -48,6 +48,7 @@ CREDENTIAL_AUTHORIZATION_DAYS = '5'
 ROOT_URLCONF = 'dashboard.urls'
 
 MIDDLEWARE_CLASSES = (
+    'django_openstack.middleware.memorydb.SQLite3MemoryInitMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
