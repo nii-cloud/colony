@@ -76,6 +76,9 @@ def image_metadata_glance(request):
 def gakunin(request):
     return {'gakunin_configured' : settings.GAKUNIN_ENABLED }
 
+def gakunin_url(request):
+    return {'gakunin_login_url' : getattr(settings, 'GAKUNIN_LOGIN_URL', '/auth/gakunin') }
+
 def swift_enable_access_to_other_account(request):
     return {'swift_enable_other_account' : settings.SWIFT_ACCESS_OTHER_ACCOUNT_ENABLED }
 
