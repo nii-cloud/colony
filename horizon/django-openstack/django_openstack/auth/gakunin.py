@@ -93,8 +93,6 @@ def login(request):
     from_email = request.META.get('email', None)
     from_eppn = request.META.get('eppn', None)
 
-    LOG.info('dump META %s' % request.META)
-
     try:
 
         retval = _login_with_gakunin(request, from_email, from_eppn, None, True)

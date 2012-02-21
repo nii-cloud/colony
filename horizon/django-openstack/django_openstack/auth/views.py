@@ -79,7 +79,7 @@ def login(request):
         if getattr(request.user, 'tenant_id', None):
             return shortcuts.redirect('dash_containers', request.user.tenant_id)
         else:
-            return shortcuts.redirect('dash_overview')
+            return shortcuts.redirect('dash_startup')
 
     form, handled = Login.maybe_handle(request)
     if handled:
