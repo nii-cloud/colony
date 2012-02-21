@@ -27,5 +27,5 @@ from django.conf import settings
 class SQLite3MemoryInitMiddleware(object):
 
     def __init__(self):
-        management.call_command('sync_db', interactive=False)
+        management.call_command('syncdb', interactive=False)
         raise MiddlewareNotUsed('Startup completed')
