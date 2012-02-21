@@ -18,16 +18,16 @@ else
 fi
 
 
-for package in horizon/openstack-dashboard keystone
+for package in openstack-dashboard keystone
 do
   if [ -n "${https_proxy}" ]; then
-     pip bundle --no-install --proxy=${https_proxy} -r ../${package}/tools/pip-requires \
+     pip bundle --no-install --proxy=${https_proxy} -r requires/${package}-pip-requires \
        -b ${BUILD_DIR}-${package} ${BUNDLE_DIR}/${package}.pybundle
   elif [ -n "${http_proxy}" ]; then
-     pip bundle --no-install --proxy=${http_proxy} -r ../${package}/tools/pip-requires \
+     pip bundle --no-install --proxy=${http_proxy} -r requires/${package}-pip-requires \
        -b ${BUILD_DIR}-${package} ${BUNDLE_DIR}/${package}.pybundle
   else
-     pip bundle --no-install -r ../${package}/tools/pip-requires \
+     pip bundle --no-install -r requires/${package}-pip-requires \
        -b ${BUILD_DIR}-${package} ${BUNDLE_DIR}/${package}.pybundle
   fi
 done

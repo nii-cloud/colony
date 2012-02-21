@@ -32,6 +32,8 @@ config_item_defaults:
     value: "0.1"
   - name: gakunin_enabled
     value: True
+  - name: swift_access_other_account
+    value: False
 
 
 component_config_defaults:
