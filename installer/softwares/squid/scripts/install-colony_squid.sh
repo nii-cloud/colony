@@ -1,3 +1,7 @@
 #!/bin/bash
 
-apt-get -y install squid
+(
+/usr/bin/apt-get -y install squid
+)
+
+exit 0
