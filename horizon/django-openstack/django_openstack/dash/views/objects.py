@@ -196,7 +196,7 @@ class ObjectMeta(forms.SelfHandlingForm):
         try:
            header.encode('ascii')
            value.encode('ascii')
-        except UnicodeEnccodeError, e:
+        except UnicodeEncodeError, e:
            messages.error(request, "Object metadata contains non-ASCII character %s" % str(e))
            return None
 
