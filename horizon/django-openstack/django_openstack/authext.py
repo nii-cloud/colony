@@ -58,7 +58,7 @@ class GakuninAuthManager(base.ManagerWithFind):
 
 class AdminExt(openstackx.admin.Admin):
 
-    def __init__(self, **kwargs):
-        super(AdminExt, self).__init__(self, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super(AdminExt, self).__init__(*args, **kwargs)
         self.gakunin = GakuninAuthManager(self)
         self.userext = UserManagerExt(self)
