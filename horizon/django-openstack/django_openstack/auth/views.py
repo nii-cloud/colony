@@ -43,13 +43,7 @@ class Login(forms.SelfHandlingForm):
     def handle(self, request, data):
 
         retval = util.auth(request, data, data.get('region'))
-        catalogs = request.session.get('defaultServiceCatalog')
-        results = set()
-        if catalogs:
-            for catalog in catalogs:
-                regions = [ catalog['endpoints'][i]['region'] for i in range(len(catalog['endpoints'])) ]
-                for region in regions:
-                    results.add(region)
+        results = util.get_regions(request)
 
         LOG.info('results %s' % results)
       
@@ -82,7 +76,10 @@ class LoginWithRegion(Login):
 
 def login(request):
     if request.user and request.user.is_authenticated():
-        return shortcuts.redirect('dash_containers', request.user.tenant_id)
+        if getattr(request.user, 'tenant_id', None):
+            return shortcuts.redirect('dash_containers', request.user.tenant_id)
+        else:
+            return shortcuts.redirect('dash_startup')
 
     form, handled = Login.maybe_handle(request)
     if handled:

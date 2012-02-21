@@ -12,6 +12,15 @@ from openstackx.api import exceptions as api_exceptions
 
 LOG = logging.getLogger('django_openstack.auth')
 
+def get_regions(request):
+    catalogs = request.session.get('defaultServiceCatalog')
+    results = set()
+    if catalogs:
+        for catalog in catalogs:
+            regions = [ catalog['endpoints'][i]['region'] for i in range(len(catalog['endpoints'])) ]
+            for region in regions:
+                results.add(region)
+    return results
 
 def set_token_for_region(request, token, region=None, unscoped=False):
     if unscoped:

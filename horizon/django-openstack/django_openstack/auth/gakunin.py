@@ -23,16 +23,66 @@ import logging
 from django import template
 from django import shortcuts
 from django.contrib import messages
+from django.conf import settings
 
 from django_openstack import api
 from django_openstack import forms
+from django_openstack.auth import util
+
 from openstackx.api import exceptions as api_exceptions
 
 
 LOG = logging.getLogger('django_openstack.auth.gakunin')
 
 
+def _login_with_gakunin(request, from_email, from_eppn, region, session_override=False):
+
+    try:
+        token = None
+        # first , try by eppn
+        if from_eppn:
+            try:
+                token = api.token_create_by_eppn(request, from_eppn)
+            except Exception, e:
+                LOG.exception('error in token_create_by_eppn')
+                pass
+        # second, try by email
+        if not token and from_email:
+            try:
+                token = api.token_create_by_email(request, from_email)
+                if token:
+                    api.user_update_eppn(request, token.user['id'], from_eppn)
+            except Exception, e:
+                LOG.exception('error in token_create_by_email')
+                pass
+ 
+        def get_first_tenant_for_user():
+            tenants = api.tenant_list_for_token(request, token.id)
+            return tenants[0] if len(tenants) else None
+ 
+        if not token:
+            messages.error(request, "Can't retrieve information from Gakunin")
+            return shortcuts.redirect('auth_login')
+
+        util.set_token_for_region(request, token, region) 
+        tenant = get_first_tenant_for_user()
+ 
+        if not tenant:
+            messages.error(request, 'No tenants present for user')
+            return shortcuts.redirect('auth_login')
+
+        data = {}
+        data['username'] = token.user['name']
+
+        util.auth_with_token(request, data, token.id, tenant.id, session_override, True)
+        return shortcuts.redirect('dash_containers', tenant.id)
+    except Exception, e:
+        messages.error(request, 'Exception occured while gakunin login %s' % str(e))
+        LOG.exception('exception')
+
+
 def login(request):
+
     if request.user and request.user.is_authenticated():
         return shortcuts.redirect('dash_containers', request.user.tenant_id)
 
@@ -44,52 +94,21 @@ def login(request):
     from_eppn = request.META.get('eppn', None)
 
     try:
-        token = None
-        # first , try by eppn
-        if from_eppn:
-            token = api.token_create_by_eppn(request, from_eppn)
- 
-        # second, try by email
-        if not token and from_email:
-            token = api.token_create_by_email(request, from_email)
-            if token:
-                api.user_update_eppn(request, token.user['id'], from_eppn)
- 
-        def get_first_tenant_for_user():
-            tenants = api.tenant_list_for_token(request, token.id)
-            return tenants[0] if len(tenants) else None
- 
-        if not token:
-            messages.error(request, "Can't retrieve information from Gakunin")
-            return shortcuts.redirect('auth_login')
- 
-        tenant = get_first_tenant_for_user()
- 
-        if not tenant:
-            messages.error(request, 'No tenants present for user')
-            return shortcuts.redirect('auth_login')
- 
-        request.session['unscoped_token'] = token.id
- 
-        def is_admin(token):
-            for role in token.user['roles']:
-                if role['name'].lower() == 'admin':
-                    return True
-            return False
- 
- 
-        request.session['admin'] = is_admin(token)
- 
-        if not token.user or not token.user.has_key('name'):
-            return shortcuts.redirect('auth_login')
-        request.session['serviceCatalog'] = token.serviceCatalog
-        request.session['tenant_id'] = tenant.id
-        request.session['tenant'] = tenant.name
-        request.session['token'] = token.id
-        request.session['user'] = token.user['name']
- 
-        return shortcuts.redirect('dash_containers', tenant.id)
+
+        retval = _login_with_gakunin(request, from_email, from_eppn, None, True)
+        regions = util.get_regions(request)
+
+        default_region = getattr(settings, 'SWIFT_DEFAULT_REGION', None)
+        for region in regions:
+            if region == default_region:
+                retval = _login_with_gakunin(request, from_email, from_eppn, region, True)
+                request.session['region'] = region
+            else:
+                _login_with_gakunin(request, from_email, from_eppn, region, False)
+
+        return retval
     except Exception, e:
-        messages.error('Exception occured while gakunin login %s' % str(e))
+        messages.error(request, 'Exception occured while gakunin login %s' % str(e))
+        LOG.exception('exception')
         return shortcuts.redirect('auth_login') 
 
