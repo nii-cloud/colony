@@ -22,7 +22,7 @@ config_item_defaults:
   - name: auth_port
     value: "5000"
   - name: relay_rule
-    value: ":http://localhost"
+    value: ":/etc/dispatcher/server0.txt"
   - name: node_timeout
     value: 10
   - name: conn_timeout
