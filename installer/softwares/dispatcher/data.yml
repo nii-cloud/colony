@@ -23,6 +23,40 @@ config_item_defaults:
     value: "5000"
   - name: relay_rule
     value: ":http://localhost"
+  - name: node_timeout
+    value: 10
+  - name: conn_timeout
+    value: 0.5
+  - name: client_timeout
+    value: 60
+  - name: client_chunk_size
+    value: 65536
+  - name: swift_storage_large_chunk_size
+    value: 5242880
+  - name: keystone_relay_path
+    value: /both/v2.0
+  - name: keystone_admin_relay_path
+    value: /admin_both/v2.0
+  - name: keystone_relay_token_paths
+    value: /both/v2.0/tokens /both/v2.0/token_by
+  - name: keystone_admin_relay_token_paths
+    value: /admin_both/v2.0/tokens /admin_both/v2.0/token_by
+  - name: keystone_one_url
+    value: http://127.0.0.1:5000
+  - name: keystone_admin_one_url
+    value: http://127.0.0.1:5001
+  - name: keystone_other_url
+    value: http://127.0.0.1:5000
+  - name: keystone_admin_other_url
+    value: http://127.0.0.1:5001
+  - name: dispatcher_base_url
+    value: http://127.0.0.1:10000
+  - name: dispatcher_admin_base_url
+    value: http://127.0.0.1:10000
+  - name: region_name
+    value: RegionOne
+  - name: admin_region_name
+    value: RegionOne
 
 component_config_defaults:
   - path: /etc/dispatcher.conf
