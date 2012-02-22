@@ -3,6 +3,7 @@
 source common/function.sh
 
 a2dismod shib2
+a2dissite default-shib
 
 apt-get -y remove libapache2-mod-shib2
 

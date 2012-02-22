@@ -33,6 +33,9 @@ component_config_defaults:
     component: colony_mod_wsgi
   - path: /etc/apache2/mods-available/shib2.conf
     component: colony_mod_shib2
+  - path: /etc/apache2/sites-available/default-shib
+    component: colony_mod_shib2
+  - path: /etc/shibboleth/shibboleth2.xml
 
 software_config_defaults:
 
