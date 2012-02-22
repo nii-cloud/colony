@@ -263,7 +263,11 @@ os.chdir(script_dir)
 if needs_install:
      install_scripts = 'common/install-installer-dep.sh'
      if os.path.exists(install_scripts):
+         print >> sys.stderr, "instaling softwares for installer"
          run_command(install_scripts, redirect_output=True)
+     print >> sys.stderr, "please execute install.py again"
+     sys.exit(0)
+     
 
 #parse arg
 argparser = argparse.ArgumentParser()
