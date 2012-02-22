@@ -182,6 +182,9 @@ class ConfigManager(object):
 
     def _get_data_path(self, name, path):
         filename = os.path.basename(path)
+        datadir = '%s/softwares/%s/data/' % (os.path.curdir, name)
+        if not os.path.exists(datadir):
+           os.makedirs(datadir, 0700)
         return '%s/softwares/%s/data/%s' % ( os.path.curdir, name, filename)
 
     def _get_templates_path(self, name, path):
