@@ -14,3 +14,13 @@ remove_templates()
    fi
    
 }
+
+create_datadir()
+{
+   name=$1
+
+   if test ! -d $cwd/softwares/$name/data; then
+      mkdir $cwd/softwares/$name/data
+   fi
+}
+

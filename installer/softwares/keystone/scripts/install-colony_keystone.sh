@@ -4,6 +4,9 @@
 colony_keystone_dir="../keystone/"
 cwd=`pwd`
 
+source common/function.sh
+create_datadir "keystone"
+
 pushd $colony_keystone_dir
 
 apt-get -y install python-dev libxml2-dev libxslt1-dev libsasl2-dev libsqlite3-dev libssl-dev libldap2-dev

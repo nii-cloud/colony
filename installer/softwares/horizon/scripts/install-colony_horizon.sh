@@ -8,6 +8,9 @@ cwd=`pwd`
 
 apt-get -y install python-kombu python-cloudfiles python-dateutil python-routes python-webob python-sqlalchemy python-paste python-pastedeploy python-migrate python-eventlet python-xattr pep8 pylint python-coverage python-lxml python-mox
 
+source common/function.sh
+create_datadir "horizon"
+
 # install pybundle
 mkdir -p $basedir
 cp -a bundle/openstack-dashboard.pybundle $basedir

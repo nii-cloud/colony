@@ -1,6 +1,9 @@
 #!/bin/bash
 
 
+source common/function.sh
+
+create_datadir "dispatcher"
 colony_dispatcher_dir="../dispatcher/"
 cwd=`pwd`
 
