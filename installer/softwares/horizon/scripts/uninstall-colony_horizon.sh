@@ -25,7 +25,7 @@ do
     rm -rf $bindir/$com
 done
 
-for com in openstatk-compute nova 
+for com in openstack-compute nova 
 do
     echo "removing $bindir/$com"
     rm -rf $bindir/$com
