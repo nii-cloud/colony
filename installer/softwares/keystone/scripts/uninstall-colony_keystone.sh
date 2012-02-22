@@ -18,4 +18,4 @@ do
    rm -rf $basedir/$com
 done
 
-remove_templates "keystone"
+remove_templates "keystone" "colony_keystone"

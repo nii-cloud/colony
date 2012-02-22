@@ -29,9 +29,9 @@ config_item_defaults:
 component_config_defaults:
   - path: /etc/apache2/apache2.conf
     component: colony_apache
-  - path: /etc/apache2/mods-available/wsgi.conf
+  - path: /etc/apache2/conf.d/wsgi.conf
     component: colony_mod_wsgi
-  - path: /etc/apache2/mods-available/shib2.conf
+  - path: /etc/apache2/conf.d/shib2.conf
     component: colony_mod_shib2
   - path: /etc/apache2/sites-available/default-shib
     component: colony_mod_shib2

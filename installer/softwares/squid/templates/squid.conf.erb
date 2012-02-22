@@ -2,17 +2,12 @@ acl all src all
 acl manager proto cache_object
 acl localhost src 127.0.0.1/32
 acl to_localhost dst 127.0.0.0/8 0.0.0.0/32
-acl SSL_ports port 443		# https
-acl Safe_ports port 80		# http
-acl Safe_ports port 443		# https
 acl purge method PURGE
 acl CONNECT method CONNECT
 http_access allow manager localhost
 http_access deny manager
 http_access allow purge localhost
 http_access deny purge
-http_access deny !Safe_ports
-http_access deny CONNECT !SSL_ports
 http_access allow localhost
 http_access deny all
 icp_access deny all

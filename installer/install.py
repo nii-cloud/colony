@@ -231,8 +231,8 @@ class ConfigManager(object):
             print 'executing scripts %s' % scripts
             status = run_command(scripts, redirect_output=False)
 
-    def _save_installed_templates(self, name, path):
-        with open(self._get_data_path(name, 'install-%s-templates.txt' % name), 'a+') as f:
+    def _save_installed_templates(self, name, comp_name, path):
+        with open(self._get_data_path(name, 'install-%s-templates.txt' % comp_name), 'a+') as f:
            print >>f , '%s' % path
 
     def ask(self, components, install=True, install_default=True):
@@ -249,7 +249,7 @@ class ConfigManager(object):
                             if comp_config.install:
                                 template_path = self._get_templates_path(name, comp_config.default_value)
                                 dump_config(value.config, template_path, comp_config.value)
-                                self._save_installed_templates(name, comp_config.value)
+                                self._save_installed_templates(name, comp_name, comp_config.value)
                         self._run_install(name, comp_name, install, True)
 
 
