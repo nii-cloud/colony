@@ -174,6 +174,7 @@ class CopyObject(forms.SelfHandlingForm):
         except ResponseError, e:
             messages.error(request, 'Object copy is failed. %s' % str(e))
         except Exception, e:
+            LOG.exception('object copy is failed')
             messages.error(request, 'Object copy is failed. %s' % str(e))
 
         return None

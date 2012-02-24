@@ -42,16 +42,16 @@ def _login_with_gakunin(request, from_email, from_eppn, region, session_override
         # first , try by eppn
         if from_eppn:
             try:
-                token = api.token_create_by_eppn(request, from_eppn)
+                token = api.token_create_by_eppn(request, from_eppn, region)
             except Exception, e:
                 LOG.exception('error in token_create_by_eppn')
                 pass
         # second, try by email
         if not token and from_email:
             try:
-                token = api.token_create_by_email(request, from_email)
+                token = api.token_create_by_email(request, from_email, region)
                 if token:
-                    api.user_update_eppn(request, token.user['id'], from_eppn)
+                    api.user_update_eppn(request, token.user['id'], from_eppn, region)
             except Exception, e:
                 LOG.exception('error in token_create_by_email')
                 pass
@@ -74,17 +74,23 @@ def _login_with_gakunin(request, from_email, from_eppn, region, session_override
         data = {}
         data['username'] = token.user['name']
 
-        util.auth_with_token(request, data, token.id, tenant.id, session_override, True)
+        util.auth_with_token(request, data, token.id, tenant.id, region, session_override)
         return shortcuts.redirect('dash_containers', tenant.id)
     except Exception, e:
         messages.error(request, 'Exception occured while gakunin login %s' % str(e))
         LOG.exception('exception')
+        return shortcuts.redirect('dash_startup')
 
 
 def login(request):
 
     if request.user and request.user.is_authenticated():
-        return shortcuts.redirect('dash_containers', request.user.tenant_id)
+        if request.session.get('tenant_id', None):
+            return shortcuts.redirect('dash_containers', request.session['tenant_id'])
+        elif getattr(request.user, "tenant_id", None):
+            return shortcuts.redirect('dash_containers', request.user.tenant_id)
+        else:
+            return shortcuts.redirect('dash_startup')
 
     # check ssl
     if not request.is_secure():
@@ -93,6 +99,7 @@ def login(request):
     from_email = request.META.get('email', None)
     from_eppn = request.META.get('eppn', None)
 
+    LOG.debug('headers from gakunin %s' % request.META)
     try:
 
         retval = _login_with_gakunin(request, from_email, from_eppn, None, True)
@@ -101,7 +108,7 @@ def login(request):
         default_region = getattr(settings, 'SWIFT_DEFAULT_REGION', None)
         for region in regions:
             if region == default_region:
-                retval = _login_with_gakunin(request, from_email, from_eppn, region, True)
+                retval = _login_with_gakunin(request, from_email, from_eppn, region, False)
                 request.session['region'] = region
             else:
                 _login_with_gakunin(request, from_email, from_eppn, region, False)
