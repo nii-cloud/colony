@@ -35,7 +35,7 @@ from openstackx.api import exceptions as api_exceptions
 LOG = logging.getLogger('django_openstack.auth.gakunin')
 
 
-def _login_with_gakunin(request, from_email, from_eppn, region, session_override=False):
+def _login_with_gakunin(request, from_email, from_eppn, region, show_error=False):
 
     try:
         token = None
@@ -62,24 +62,23 @@ def _login_with_gakunin(request, from_email, from_eppn, region, session_override
  
         if not token:
             messages.error(request, "Can't retrieve information from Gakunin")
-            return shortcuts.redirect('auth_login')
+            return None
 
-        util.set_token_for_region(request, token, region) 
+        util.set_region_info(request, token, region) 
         tenant = get_first_tenant_for_user()
  
         if not tenant:
             messages.error(request, 'No tenants present for user')
-            return shortcuts.redirect('auth_login')
+            return None
 
         data = {}
         data['username'] = token.user['name']
 
-        util.auth_with_token(request, data, token.id, tenant.id, region, session_override)
-        return shortcuts.redirect('dash_containers', tenant.id)
+        return util.auth_with_token(request, data, token.id, tenant.id, region, True)
     except Exception, e:
-        messages.error(request, 'Exception occured while gakunin login %s' % str(e))
+        if show_error:
+            messages.error(request, 'Exception occured while gakunin login %s' % str(e))
         LOG.exception('exception')
-        return shortcuts.redirect('dash_startup')
 
 
 def login(request):
@@ -96,24 +95,54 @@ def login(request):
     if not request.is_secure():
         messages.error(request, "Gakunin Support needs to be accessed through TLS")
         return shortcuts.redirect('auth_login')
-    from_email = request.META.get('email', None)
+    from_email = request.META.get('mail', None)
     from_eppn = request.META.get('eppn', None)
 
     LOG.debug('headers from gakunin %s' % request.META)
     try:
 
-        retval = _login_with_gakunin(request, from_email, from_eppn, None, True)
-        regions = util.get_regions(request)
+        if getattr(settings, "KEYSTONE_USE_LOCAL_FOR_ENDPOINTS_ONLY", False):
+            data = { 'username' : 'dummy' }
+            token = util.auth_with_token(request, data, getattr(settings,
+                          "KEYSTONE_ADMIN_TOKEN", ''), None, None, True)
+        else:
+            token = _login_with_gakunin(request, from_email, from_eppn, None, True)
 
+        if not token:
+            request.session.clear()
+            return shortcuts.redirect('auth_login')
+
+        util.set_default_service_catalog(request, token.serviceCatalog)
+
+        regions = util.get_regions(request)
         default_region = getattr(settings, 'SWIFT_DEFAULT_REGION', None)
+        tokens = []
         for region in regions:
             if region == default_region:
-                retval = _login_with_gakunin(request, from_email, from_eppn, region, False)
-                request.session['region'] = region
+                retval = _login_with_gakunin(request, from_email, from_eppn, region, True)
+                if retval:
+                    request.session['region'] = region
             else:
-                _login_with_gakunin(request, from_email, from_eppn, region, False)
+                retval = _login_with_gakunin(request, from_email, from_eppn, region, True)
+            if retval:
+                tokens.append(region)
 
-        return retval
+        if not tokens:
+            request.session.clear()
+            return shortcuts.redirect('auth_login')
+
+        if not request.session.get('region', None):
+            request.session['region'] = tokens[0]
+
+        tenant = util.get_tenant_for_region(request)
+        util.set_default_for_region(request)
+        api.check_services_for_region(request)
+
+        if not tenant:
+            return shortcuts.redirect('dash_startup')
+        else:
+            return shortcuts.redirect('dash_containers', tenant)
+
     except Exception, e:
         messages.error(request, 'Exception occured while gakunin login %s' % str(e))
         LOG.exception('exception')

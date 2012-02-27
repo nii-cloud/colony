@@ -62,16 +62,22 @@ def regions(request):
         return {'regions' : []}
 
 def compute(request):
-    return {'compute_configured' : settings.OPENSTACK_COMPUTE_ENABLED}
+
+    result = request.session.get('OPENSTACK_COMPUTE_ENABLED', False)
+    return {'compute_configured' : result }
 
 def swift(request):
-    return {'swift_configured': settings.SWIFT_ENABLED}
+
+    result = request.session.get('SWIFT_ENABLED', False)
+    return {'swift_configured': result }
 
 def quantum(request):
     return {'quantum_configured': settings.QUANTUM_ENABLED}
 
 def image_metadata_glance(request):
-    return {'image_metadata_glance' : settings.IMAGE_METADATA_GLANCE_ENABLED}
+
+    result = request.session.get('IMAGE_METADATA_GLANCE_ENABLED', False)
+    return {'image_metadata_glance' : result}
 
 def gakunin(request):
     return {'gakunin_configured' : settings.GAKUNIN_ENABLED }
@@ -80,5 +86,5 @@ def gakunin_url(request):
     return {'gakunin_login_url' : getattr(settings, 'GAKUNIN_LOGIN_URL', '/auth/gakunin') }
 
 def swift_enable_access_to_other_account(request):
-    return {'swift_enable_other_account' : settings.SWIFT_ACCESS_OTHER_ACCOUNT_ENABLED }
+    return {'swift_enable_other_account' : getattr(settings, 'SWIFT_ACCESS_OTHER_ACCOUNT_ENABLED', False) }
 

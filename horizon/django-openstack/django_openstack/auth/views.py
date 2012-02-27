@@ -42,22 +42,49 @@ class Login(forms.SelfHandlingForm):
 
     def handle(self, request, data):
 
-        retval = util.auth(request, data, data.get('region'))
-        results = util.get_regions(request)
+        # retrieve endpoints
+        if getattr(settings, "KEYSTONE_USE_LOCAL_FOR_ENDPOINTS_ONLY", False):
+            token = util.auth_with_token(request, data, getattr(settings, "KEYSTONE_ADMIN_TOKEN", ''))
+        else:
+            token = util.auth(request, data, data.get('region'), True)
 
+        if not token:
+            request.session.clear()
+            return shortcuts.redirect('auth_login')
+
+        # set default service catalog
+        util.set_default_service_catalog(request, token.serviceCatalog)
+
+        # region
+        results = util.get_regions(request)
         LOG.info('results %s' % results)
-      
+     
+        tokens = [] 
         for result in results:
             data['region'] = result
-            util.auth(request, data, result, False)
-            if api.token_for_region(request, result) == request.session.get('token'):
-                request.session['region'] = result.encode('utf-8')
+            token = util.auth(request, data, result, True)
+            if token:
+                tokens.append(result)
+
+        if not tokens:
+            request.session.clear()
+            return shortcuts.redirect('auth_login')
 
         default_region = getattr(settings, 'SWIFT_DEFAULT_REGION', None)
         if default_region and api.token_for_region(request, default_region):
             request.session['region'] = default_region
 
-        return retval
+        if not request.session.get('region', None):
+            request.session['region'] = tokens[0]
+
+        tenant = util.get_tenant_for_region(request)
+        util.set_default_for_region(request)
+        api.check_services_for_region(request)
+
+        if not tenant:
+            return shortcuts.redirect('dash_startup')
+
+        return shortcuts.redirect('dash_containers', tenant)
 
 
 class LoginWithTenant(Login):
@@ -71,7 +98,16 @@ class LoginWithRegion(Login):
     region = forms.CharField(widget=forms.HiddenInput())
 
     def handle(self, request, data):
-        return super(LoginWithRegion, self).handle(request, data)
+        token = util.auth(request, data, data['region'])
+        if not token:
+            return None
+        request.session['region'] = data['region']
+        util.set_default_for_region(request)
+        tenant = util.get_tenant_for_region(request)
+        api.check_services_for_region(request)
+        if not tenant:
+            return shortcuts.redirect('dash_startup')
+        return shortcuts.redirect('dash_containers', tenant)
 
 
 def login(request):
@@ -95,14 +131,22 @@ def switch_regions(request, region_name):
             request, initial={'region' : region_name,
                               'username' : request.user.username})
 
-    tokens = request.session.get('token_for_region', {})
-    if tokens.has_key(region_name):
+    token = api.token_for_region(request, region_name)
+    LOG.debug('token %s' % token)
+    if token:
         data = { 'username' : request.user.username,
                  'region' : region_name }
-        retval =  util.auth_with_token(request, data, tokens.get(region_name), None, region_name, True)
+        retval =  util.auth_with_token(request, data, token, None, region_name, True)
+        LOG.debug("retval %s" % retval)
         if retval:
             request.session['region'] = region_name
-            return retval
+            util.set_default_for_region(request)
+            api.check_services_for_region(request)
+            tenant_id = request.session.get('tenant_id', None)
+            if tenant_id:
+                return shortcuts.redirect('dash_containers', tenant_id)
+            else:
+                return shortcuts.redirect('dash_startup')
 
     if handled:
         request.session['region'] = region_name

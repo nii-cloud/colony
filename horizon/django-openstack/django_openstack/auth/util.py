@@ -22,28 +22,75 @@ def get_regions(request):
                 results.add(region)
     return results
 
-def set_token_for_region(request, token, region=None, unscoped=False):
+def get_tenant_for_region(request, region=None):
+
+    try:
+        if not region:
+            region = request.session.get('region')
+        return request.session['tenant_for_region'][region]['tenant_id']
+    except:
+        return None
+
+
+def set_tenant_for_region(request, tenant, region):
+    if region:
+        if not request.session.has_key('tenant_for_region'):
+            request.session['tenant_for_region'] = {}
+        request.session['tenant_for_region'][region] = {}
+        request.session['tenant_for_region'][region]['tenant_id'] = tenant.id
+        request.session['tenant_for_region'][region]['tenant_name'] = tenant.name
+        LOG.debug('tenant info %s' % request.session['tenant_for_region'])
+
+def set_default_service_catalog(request, catalog):
+    request.session['defaultServiceCatalog'] = catalog
+
+def set_region_info(request, token, region=None, unscoped=False):
     if unscoped:
        request.session['unscoped_token'] = token.id
     else:
         if region:
-            if not request.session.has_key('token_for_region'):
-                request.session['token_for_region'] = {}
-            request.session['token_for_region'][region] = token.id
-            LOG.debug('token_for_region %s' % request.session['token_for_region'])
+            if not request.session.has_key('region_info'):
+                request.session['region_info'] = {}
+            request.session['region_info'][region] = {}
+            request.session['region_info'][region]['token_id'] = token.id
+            request.session['region_info'][region]['serviceCatalog'] = token.serviceCatalog
+            request.session['region_info'][region]['user'] = token.user
+            LOG.debug('region_info %s' % request.session['region_info'])
         else:
             request.session['token'] = token.id
     if not request.session.get('defaultServiceCatalog'):
         request.session['defaultServiceCatalog'] = token.serviceCatalog
 
+def set_default_for_region(request, region=None):
 
-
-def auth_with_token(request, data, token_id, tenant_id = None,  region=None, session_override=True):
-    def is_admin(token):
-        for role in token.user['roles']:
+    def is_admin(user):
+        for role in user['roles']:
             if role['name'].lower() == 'admin':
                 return True
         return False
+
+    if not region:
+        region = request.session.get('region')
+    info = request.session['region_info'][region]
+
+    request.session['token'] = info['token_id']
+    request.session['serviceCatalog'] = info['serviceCatalog']
+    LOG.debug('info %s' % info)
+    request.session['admin'] = is_admin(info['user'])
+    request.session['user'] = info['user']['name']
+
+    try:
+        tenant_info = request.session['tenant_for_region'][region]
+        LOG.debug('tenant_info_info %s' % tenant_info)
+ 
+        request.session['tenant'] = tenant_info['tenant_name']
+        request.session['tenant_id'] = tenant_info['tenant_id']
+    except KeyError, e:
+        pass
+    
+ 
+
+def auth_with_token(request, data, token_id, tenant_id = None, region=None, show_error=False):
     try:
         try:
             tenants = api.tenant_list_for_token_and_region(request, token_id, region)
@@ -69,33 +116,25 @@ def auth_with_token(request, data, token_id, tenant_id = None,  region=None, ses
                                  token_id,
                                  region)
 
-        if session_override:
-            request.session['admin'] = is_admin(token)
-            request.session['serviceCatalog'] = token.serviceCatalog
-            #request.session['admin'] = True
-            #request.session['serviceCatalog'] = {}
+        # set tanent info for region
+        set_tenant_for_region(request, tenant, region)
 
-            LOG.info('Login form for user "%s". Service Catalog data:\n%s' %
-                 (data['username'], token.serviceCatalog))
-
-            request.session['tenant'] = tenant.name
-            request.session['tenant_id'] = tenant.id
-            request.session['user'] = data['username']
-
-        return shortcuts.redirect('dash_containers', tenant.id)
+        return token
 
     except api_exceptions.Unauthorized as e:
         msg = 'Error authenticating: %s' % e.message
         LOG.exception(msg)
-        if session_override:
+        if show_error:
             messages.error(request, msg)
     except api_exceptions.ApiException as e:
-        if session_override:
-            messages.error(request, 'H Error authenticating with keystone: %s' %
+        if show_error:
+            messages.error(request, 'Error authenticating with keystone: %s' %
                                  e.message)
+        LOG.exception('Error authenticating with keystone: %s for region %s' %
+                                 (e.message, region))
 
 
-def auth(request, data, region, session_override=True):
+def auth(request, data, region, show_error=False):
 
     try:
 
@@ -107,17 +146,19 @@ def auth(request, data, region, session_override=True):
                                      data['username'],
                                      data['password'],
                                      region)
-        set_token_for_region(request, token, region)
+        set_region_info(request, token, region)
 
-        return auth_with_token(request, data, token.id, tenant_id, region, session_override)
+        return auth_with_token(request, data, token.id, tenant_id, region, show_error)
 
     except api_exceptions.Unauthorized as e:
-        msg = 'Error authenticating: %s' % e.message
+        msg = 'Error authenticating: %s for region %s' % (e.message, region)
         LOG.exception(msg)
-        if session_override:
+        if show_error:
             messages.error(request, msg)
     except api_exceptions.ApiException as e:
-        if session_override:
+        if show_error:
             messages.error(request, 'Error authenticating with keystone: %s' %
                                  e.message)
+        LOG.exception('Error authenticating with keystone: %s for region %s' %
+                                 (e.message, region))
 

@@ -42,7 +42,7 @@ class UserManagerExt(base.ManagerWithFind):
     def update_eppn(self, user_id, eppn):
         params = {"user": {"id": user_id,
                            "eppn": eppn }}
-        self._update("/users/%s/eppn" % user_id, params)
+        self._update("users/%s/eppn" % user_id, params)
 
 
 class GakuninAuthManager(base.ManagerWithFind):

@@ -354,11 +354,61 @@ def token_for_region(request, region=None):
         if not region:
             region = request.session.get('region')
         LOG.info('token for region %s' % region)
-        return request.session['token_for_region'][region]
+        return request.session['region_info'][region]['token_id']
     except KeyError, e:
         LOG.info('token for region default')
         #return request.session.get('token')
         return None
+
+def check_services_for_region(request, region=None):
+
+    LOG.debug('check_services_for_region')
+
+    # clear all session data
+    for ses in ['OPENSTACK_COMPUTE_ENABLED', 'SWIFT_ENABLED',
+                'IMAGE_METADATA_GLANCE_ENABLED', 'QUANTUM_ENABLED']:
+        if request.session.has_key(ses):
+            del request.session[ses]
+
+    # compute
+    if getattr(settings, "OPENSTACK_COMPUTE_ENABLED", False):
+        LOG.debug("compute")
+        try:
+            flavor_list(request)
+            request.settion['OPENSTACK_COMPUTE_ENABLED'] = True
+        except:
+            LOG.exception('check_service')
+            pass
+    # swift
+    if getattr(settings, "SWIFT_ENABLED", False):
+        LOG.debug("swift")
+        try:
+            swift_get_containers(request)
+            request.session['SWIFT_ENABLED'] = True
+            LOG.info('swift-')
+        except:
+            LOG.exception('check_service')
+            pass
+
+    # metadata
+    if getattr(settings, "IMAGE_METADATA_GLANCE_ENABLED", False):
+        LOG.debug("metadata")
+        try:
+            image_list_detailed(request)
+            request.session['IMAGE_METADATA_GLANCE_ENABLED'] = True
+        except:
+            LOG.exception('check_service')
+            pass
+
+    # quantum
+    if getattr(settings, "QUANTUM_ENABLED", False):
+        LOG.debug("quantum")
+        try:
+            quantum_list_networks(request)
+            request.session['QUANTUM_ENABLED'] = True
+        except:
+            LOG.exception('check_service')
+            pass
 
 def url_for_with_slash(request, service_type, admin=False, region=None):
     url = url_for(request, service_type, admin, region)
@@ -450,9 +500,9 @@ def glance_api(request):
 def admin_api(request):
     LOG.info('admin_api connection created using token "%s"'
                     ' and url "%s"' %
-                    (token_for_region(request), url_for(request, 'compute', True)))
+                    (token_for_region(request), url_for_with_slash(request, 'compute', True)))
     return openstackx.admin.Admin(auth_token=token_for_region(request),
-                                 management_url=url_for(request, 'compute', True))
+                                 management_url=url_for_with_slash(request, 'compute', True))
 
 def gakunin_api(request, region=None):
     try:
@@ -887,8 +937,8 @@ def user_update_password(request, user_id, password):
 def user_update_tenant(request, user_id, tenant_id):
     return User(account_api(request).users.update_tenant(user_id, tenant_id))
 
-def user_update_eppn(request, user_id, eppn):
-    return User(gakunin_api(request).userext.update_eppn(user_id, eppn))
+def user_update_eppn(request, user_id, eppn, region):
+    return User(gakunin_api(request, region).userext.update_eppn(user_id, eppn))
 
 def _get_role(request, name):
     roles = account_api(request).roles.list()
