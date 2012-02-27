@@ -35,6 +35,7 @@ al.
 
 import httplib
 import time
+import types
 
 from urllib import quote , unquote
 
@@ -766,7 +767,18 @@ def users_list_for_token_and_tenant(request, token, tenant):
     admin_account =  openstackx.extras.Account(
                      auth_token=token_for_region(request),
                      management_url=url_for_with_no_slash(request, 'identity', True))
+
+    def _get_for_tenant_patch(self, tenant_id):
+        return self._list("/tenants/%s/users?limit=10000" % tenant_id, "users")
+
     LOG.info('users_list_for_tokan_and_tenant %s' % tenant)
+
+    # patching current method
+
+    f = types.MethodType(_get_for_tenant_patch, admin_account.users,
+                         openstackx.extras.UserManager)
+    admin_account.users.get_for_tenant = f
+
     return [User(u) for u in admin_account.users.get_for_tenant(tenant)]
 
 
