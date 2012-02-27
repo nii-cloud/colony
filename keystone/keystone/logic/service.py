@@ -1116,7 +1116,7 @@ class IdentityService(object):
     add by colony. 
     '''
     def get_token_by_email(self, admin_token, email):
-        self.__validate_admin_token(admin_token)
+        self.__validate_token(admin_token, False)
         dmail = api.USER.get_by_email(email)
 
         def validate(duser):
@@ -1128,7 +1128,7 @@ class IdentityService(object):
         raise fault.ItemNotFoundFault("email not found")
 
     def get_token_by_eppn(self, admin_token, eppn):
-        self.__validate_admin_token(admin_token)
+        self.__validate_token(admin_token, False)
         deppn = api.USER.get_by_eppn(eppn)
 
         def validate(duser):

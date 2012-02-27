@@ -25,6 +25,7 @@ from keystone.controllers.user import UserController
 from keystone.controllers.version import VersionController
 from keystone.controllers.staticfiles import StaticFilesController
 from keystone.controllers.extensions import ExtensionsController
+from keystone.controllers.token_by import TokenByController
 
 
 class ServiceApi(wsgi.Router):
@@ -57,6 +58,21 @@ class ServiceApi(wsgi.Router):
                     controller=user_controller,
                     action="get_tenant_users",
                     conditions=dict(method=["GET"]))
+
+        """
+        get token by email
+        add by colony.
+        """
+        # Get token by key Operations
+        token_by_controller = TokenByController(options)
+        mapper.connect("/token_by/email",
+                    controller=token_by_controller,
+                    action="get_token_by",
+                    conditions=dict(method=["POST"]))
+        mapper.connect("/token_by/eppn",
+                    controller=token_by_controller,
+                    action="get_token_by",
+                    conditions=dict(method=["POST"]))
 
         # Miscellaneous Operations
         version_controller = VersionController(options)
