@@ -127,7 +127,7 @@ class DownloadObject(forms.SelfHandlingForm):
                 response.write(data)
             return response
         except NoSuchObject, e:
-            messages.error('Error occurs in downloading object %s' % str(e))
+            messages.error(request, 'Error occurs in downloading object %s' % str(e))
  
 
 class CopyObject(forms.SelfHandlingForm):
