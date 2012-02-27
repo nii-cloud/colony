@@ -178,7 +178,7 @@ class Dispatcher(object):
     def __init__(self, conf):
         self.conf = conf
         self.logger = get_logger(conf, log_route='dispatcher')
-        self.dispatcher_addr = conf.get('bind_ip', '127.0.0.1')
+        self.dispatcher_addr = conf.get('dispatcher_base_addr', conf.get('bind_ip', '127.0.0.1'))
         self.dispatcher_port = int(conf.get('bind_port', 8000))
         self.ssl_enabled = True if 'cert_file' in conf else False
         self.relay_rule = conf.get('relay_rule')
@@ -557,13 +557,13 @@ class Dispatcher(object):
             obj = '/'.join(path[2:])
             cont_prefix = self._get_container_prefix(container)
             real_container = container.split(cont_prefix + self.combinater_char)[1] if cont_prefix else container
-            return account, cont_prefix, real_container, obj
+            return account, quote(cont_prefix), quote(real_container), obj
         if len(path) == 2:
             account, container = path
             container = unquote(container)
             cont_prefix = self._get_container_prefix(container)
             real_container = container.split(cont_prefix + self.combinater_char)[1] if cont_prefix else container
-            return account, cont_prefix, real_container, None
+            return account, quote(cont_prefix), quote(real_container), None
         if len(path) == 1:
             account = path[0]
             return account, None, None, None
@@ -577,9 +577,10 @@ class Dispatcher(object):
 
     def _get_copy_from(self, req):
         cont, obj = [c for c in req.headers['x-copy-from'].split('/') if c]
-        cont_prefix = self._get_container_prefix(cont)
-        real_cont = cont.split(cont_prefix + ':')[1] if cont_prefix else cont
-        return cont_prefix, real_cont, obj
+        cont_unquoted = unquote(cont)
+        cont_prefix = self._get_container_prefix(cont_unquoted)
+        real_cont = cont_unquoted.split(cont_prefix + ':')[1] if cont_prefix else cont
+        return quote(cont_prefix), quote(real_cont), obj
 
     def _merge_headers(self, resps, location):
         """ """

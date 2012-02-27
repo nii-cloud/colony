@@ -46,13 +46,14 @@ class KeystoneMerge(object):
         """ """
         req = Request(env)
         real_path = '/' + '/'.join(req.path.split('/')[2:])
-        print real_path
+        #print real_path
         if not self.is_keystone_req(req):
             self.logger.info('pass through')
             return self.app(env, start_response)
         if self.is_keystone_auth_token_req(req):
             self.logger.info('return auth response that merged one and other')
             mbody, mheaders = self.relay_keystone_auth_req(req, real_path)             
+            #print 'mbody in keystone_merge: %s' % mbody
             if mbody:
                 merged_resp = Response(request=req, 
                                        body=mbody, 
@@ -82,10 +83,15 @@ class KeystoneMerge(object):
         check path is controled by keystone_merge. 
         ex: '/v2.0/tokens'
         """
+        #print 'req.path in keystone_merge: %s' % req.path
         for path in self.keystone_relay_token_paths:
-            if req.path == path and req.method == 'POST' \
+            #print 'path in keystone_merge: %s' % path
+            #if req.path.rstrip('/').startswith(path.rstrip('/')) and req.method == 'POST' \
+            if req.path.rstrip('/') == path.rstrip('/') and req.method == 'POST' \
                     and req.content_type == 'application/json':
+                #print 'is_keystone_auth_token_req: OK'
                 return True
+        #print 'is_keystone_auth_token_req: NG'
         return False
 
 
@@ -100,6 +106,7 @@ class KeystoneMerge(object):
             tokens = req.headers['x-auth-token']
             one_token = tokens.split(self.merge_str)[0]
             req.headers['x-auth-token'] = one_token
+            #print 'relay_keystone_ordinary_req'
         except KeyError, e:
             # this case is happend when auth request
             pass
@@ -114,21 +121,25 @@ class KeystoneMerge(object):
         request = json.loads(req.body)
         creds = request['auth'] if request.has_key('auth') else request
         resps = []
+        #print 'request body in keystone_merge: %s' % creds
+        #if req.headers.has_key('x-auth-token'):
+        #    print 'request header: %s' %  req.headers.get('x-auth-token')
         if creds.has_key('token') and path.rstrip('/') == '/v2.0/tokens':
+            #print 'eppn request 0: '
             # for recomfirming auth token
             merged_token = creds['token']['id']
             if merged_token.find(self.merge_str) == -1:
                 return None, None
             requests = self._merged_request_token_split(request)
-           
+
             auth_headers = [] 
             if req.headers.has_key('x-auth-token'):
                auth_headers = req.headers.get('x-auth-token').split(self.merge_str)
             for url,request in zip([self.keystone_one_url, self.keystone_other_url], requests):
-                print request
-                print url
-                print path
-                print req.headers
+                #print request
+                #print url
+                #print path
+                #print req.headers
                 try:
                     auth_header = auth_headers.pop()
                     req.headers['x-auth-token'] = auth_header
@@ -138,9 +149,19 @@ class KeystoneMerge(object):
                                                  req.headers, json.dumps(request))
                 resps.append(resp)
         else:
-            resps = [self._request_to_keystone('POST', url, path, 
-                                               req.headers, req.body)
-                     for url in [self.keystone_one_url, self.keystone_other_url]]
+            #print 'eppn request 1: %s' % url
+            if req.headers.has_key('x-auth-token'):
+                auth_headers = req.headers.get('x-auth-token').split(self.merge_str)
+                #print 'auth_tokens: %s' % auth_headers
+            try:
+                auth_header = auth_headers.pop()
+                req.headers['x-auth-token'] = auth_header
+            except IndexError, e:
+                pass
+            #print req.headers
+            resps = [self._request_to_keystone('POST', url, path, req.headers, req.body) for url in [self.keystone_one_url, self.keystone_other_url]]
+        #for resp in resps:
+        #    print 'resp.status: %s %s' % (resp.status, resp.url)
         bodies = self._get_bodies(resps)
         return self._access_info_merge(bodies), self._merge_headers(resps)
 
@@ -186,6 +207,7 @@ class KeystoneMerge(object):
         expires = None
         tkn_id = None
         tenant = tokens[0]['tenant']
+        #print 'tokens in keystone_merge: %s' % tokens
         for token in tokens:
             if not expires or expires < token['expires']:
                 expires =  token['expires']
@@ -255,14 +277,9 @@ class KeystoneMerge(object):
         connector = HTTPSConnection if parsed.scheme == 'https' else HTTPConnection 
         host, port = self._split_netloc(parsed)
         with ConnectionTimeout(300):
-            print host
-            print port
-            print path
-            print body
-            print headers
-            print len(body)
             conn = connector(host, port)
             headers['Content-Length'] = len(body)
+            #print '%s %s %s %s' % (method, path, body, headers)
             conn.request(method, path, body, headers)
             with Timeout(300):
                 return conn.getresponse()
