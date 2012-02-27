@@ -35,6 +35,7 @@ al.
 
 import httplib
 import time
+import types
 
 from urllib import quote , unquote
 
@@ -453,15 +454,21 @@ def admin_api(request):
     return openstackx.admin.Admin(auth_token=token_for_region(request),
                                  management_url=url_for(request, 'compute', True))
 
-def gakunin_api(request):
+def gakunin_api(request, region=None):
     try:
-        url = url_for(request, 'identity', True)
+        url = url_for_with_slash(request, 'identity', True, region)
     except ServiceCatalogException, ex:
-        url = settings.OPENSTACK_KEYSTONE_ADMIN_URL
-    LOG.info('admin_api connection created using token "%s"'
+        url = settings.OPENSTACK_KEYSTONE_ADMIN_URL.rstrip('/') + '/'
+
+    tokens_for_gakunin = getattr(settings, "TOKENS_FOR_GAKUNIN", None)
+    if tokens_for_gakunin and region and tokens_for_gakunin.has_key(region):
+        token = tokens_for_gakunin[region]
+    else:
+        token = getattr(settings, "KEYSTONE_ADMIN_TOKEN", None)
+    LOG.info('gakunin_api connection created using token "%s"'
                     ' and url "%s"' %
-                    (settings.KEYSTONE_ADMIN_TOKEN, url))
-    return authext.AdminExt(auth_token=settings.KEYSTONE_ADMIN_TOKEN,
+                    (token, url))
+    return authext.AdminExt(auth_token=token,
                                  management_url=url)
 
 def extras_api(request):
@@ -760,7 +767,18 @@ def users_list_for_token_and_tenant(request, token, tenant):
     admin_account =  openstackx.extras.Account(
                      auth_token=token_for_region(request),
                      management_url=url_for_with_no_slash(request, 'identity', True))
+
+    def _get_for_tenant_patch(self, tenant_id):
+        return self._list("/tenants/%s/users?limit=10000" % tenant_id, "users")
+
     LOG.info('users_list_for_tokan_and_tenant %s' % tenant)
+
+    # patching current method
+
+    f = types.MethodType(_get_for_tenant_patch, admin_account.users,
+                         openstackx.extras.UserManager)
+    admin_account.users.get_for_tenant = f
+
     return [User(u) for u in admin_account.users.get_for_tenant(tenant)]
 
 
@@ -770,11 +788,11 @@ def tenant_update(request, tenant_id, tenant_name, description, enabled):
                                                       description,
                                                       enabled))
 
-def token_create_by_email(request, email):
-    return Token(gakunin_api(request).gakunin.create_token_by_email(email))
+def token_create_by_email(request, email, region=None):
+    return Token(gakunin_api(request, region).gakunin.create_token_by_email(email))
 
-def token_create_by_eppn(request, eppn):
-    return Token(gakunin_api(request).gakunin.create_token_by_eppn(eppn))
+def token_create_by_eppn(request, eppn, region=None):
+    return Token(gakunin_api(request, region).gakunin.create_token_by_eppn(eppn))
 
 def token_create(request, tenant, username, password):
     return Token(auth_api().tokens.create(tenant, username, password))
@@ -990,7 +1008,7 @@ def swift_copy_object(request, orig_container_name, orig_object_name,
     orig_container_name = orig_container_name.replace('/', '%2F')
     orig_object_name = orig_object_name.replace('/', '%2F')
 
-    return new_obj.copy_from(orig_container_name, orig_object_name)
+    return new_obj.copy_from(quote(orig_container_name), quote(orig_object_name))
 
 def swift_upload_object(request, container_name, object_name, object_data, storage_url=None):
     container = swift_api(request, storage_url).get_container(container_name)

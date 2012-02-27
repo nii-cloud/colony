@@ -968,16 +968,20 @@ input[readonly="readonly"] {
   padding: 24px 0 25px 25px;
   float: left;
   border-top: 1px solid #d2d9dc;
+  text-align: center;
 }
 
+
 #alternate_links a {
-  color: #ababab;
-  font-size: 14px;
-  margin: 0 0 5px 0;
+  /* color: #ababab; */
+  font-size: 16px;
+  padding: 0 0 0 0;
   float: left;
+  text-align: center;
   clear: both;
 }
-#alternate_links a:hover { color: #989898; }
+
+/* #alternate_links a:hover { color: #989898; } */
 
 
 /* Containers */

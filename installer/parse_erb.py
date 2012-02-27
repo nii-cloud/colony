@@ -2,19 +2,13 @@
 import rython
 
 
-ctx = None
-
-def init_ctx():
-    global ctx
-    if not ctx:
-        ctx = rython.RubyContext(requires=['erb'], debug=True)
-        ctx.load()
-
 def get_ctx():
-    global ctx
-    if not ctx:
-        init_ctx()
+    ctx = rython.RubyContext(requires=['erb'], debug=True)
+    ctx.load()
     return ctx
+
+def end_ctx(ctx):
+    ctx.unload()
 
 def dump_config(configs=None, template_path=None, path=None):
 
@@ -28,4 +22,4 @@ def dump_config(configs=None, template_path=None, path=None):
     with open(path, "w") as f:
         if erb:
             f.write(erb)
-
+    end_ctx(ctx)

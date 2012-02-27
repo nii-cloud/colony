@@ -34,14 +34,14 @@ SITE_BRANDING = 'OpenStack'
 SITE_NAME = 'openstack'
 ENABLE_VNC = True
 
-LOGIN_URL = '/auth/login'
-LOGIN_REDIRECT_URL = '/'
+LOGIN_URL = "<%= login_url %>"
+LOGIN_REDIRECT_URL = "<%= login_redirect_url %>"
 
 MEDIA_ROOT = os.path.abspath(os.path.join(ROOT_PATH, '..', 'media'))
-MEDIA_URL = '/media/'
+MEDIA_URL = "<%= media_url %>"
 STATIC_ROOT = os.path.abspath(os.path.join(ROOT_PATH, '..', 'static'))
-STATIC_URL = '/static/'
-ADMIN_MEDIA_PREFIX = '/static/admin/'
+STATIC_URL = "<%= static_url %>"
+ADMIN_MEDIA_PREFIX = "<%= admin_media_url %>"
 
 CREDENTIAL_AUTHORIZATION_DAYS = '5'
 

@@ -25,13 +25,13 @@ do
     rm -rf $bindir/$com
 done
 
-for com in openstatk-compute nova 
+for com in openstack-compute nova 
 do
     echo "removing $bindir/$com"
     rm -rf $bindir/$com
 done
 
-remove_templates "horizon"
+remove_templates "horizon" "colony_horizon"
 
 rm -rf /usr/local/share/dash
 rm -rf /usr/local/share/horizon

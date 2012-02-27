@@ -6,12 +6,15 @@ log_facility = <%= log_facility %>
 log_name = <%= log_name %>
 
 [pipeline:main]
-pipeline = dispatcher
+pipeline = keystone_admin_merge keystone_merge s3token swift3 dispatcher
 
 [app:dispatcher]
 use = egg:dispatcher#dispatcher
-conn_timout = 0.5
-timout = 60
+node_timeout = <%= node_timeout %>
+conn_timeout = <%= conn_timeout %>
+client_timeout = <%= client_timeout %>
+client_chunk_size = <%= client_chunk_size %>
+swift_storage_large_chunk_size = <%= swift_storage_large_chunk_size %>
 relay_rule = <%= relay_rule %>
 
 [filter:swift3]
@@ -22,3 +25,21 @@ use = egg:keystone#s3token
 auth_protocol = <%= auth_protocol %>
 auth_host = <%= auth_host %>
 auth_port = <%= auth_port %>
+
+[filter:keystone_merge]
+use = egg:dispatcher#keystone_merge
+keystone_relay_path = <%= keystone_relay_path %>
+keystone_relay_token_paths = <%= keystone_relay_token_paths %>
+keystone_one_url = <%= keystone_one_url %>
+keystone_other_url = <%= keystone_other_url %>
+dispatcher_base_url = <%= dispatcher_base_url %>
+region_name = <%= region_name %>
+
+[filter:keystone_admin_merge]
+use = egg:dispatcher#keystone_merge
+keystone_relay_path = <%= keystone_admin_relay_path %>
+keystone_relay_token_paths = <%= keystone_admin_relay_token_paths %>
+keystone_one_url = <%= keystone_admin_one_url %>
+keystone_other_url = <%= keystone_admin_other_url %>
+dispatcher_base_url = <%= dispatcher_admin_base_url %>
+region_name = <%= admin_region_name %>

@@ -17,19 +17,3 @@
   Alias /shibboleth-sp/main.css /usr/share/shibboleth/main.css
   Alias /shibboleth-sp/logo.jpg /usr/share/shibboleth/logo.jpg
 </IfModule>
-
-#
-# Configure the module for content.
-#
-# You MUST enable AuthType shibboleth for the module to process
-# any requests, and there MUST be a require command as well. To
-# enable Shibboleth but not specify any session/access requirements
-# use "require shibboleth".
-#
-
-<Location /secure>
-  AuthType shibboleth
-  ShibRequestSetting requireSession 1
-  ShibUseHeaders On
-  Require shibboleth
-</Location>

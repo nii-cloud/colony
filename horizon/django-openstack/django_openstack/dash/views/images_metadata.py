@@ -261,7 +261,7 @@ def download(request, tenant_id, image_id):
                    <item>
                        <name>%s</name>
                        <value>%s</value>
-                   </item>""" % (propkey, propval)
+                   </item>""" % (key, image.properties.get(key))
                     property_value.append(item)
         data = """
         <image type="openstack-glance">

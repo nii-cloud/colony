@@ -4,7 +4,10 @@ import os
 DEBUG = False
 TEMPLATE_DEBUG = DEBUG
 PROD = False
+
+# If you want to use SSL, change it
 USE_SSL = False
+SESSION_COOKIE_SECURE=False
 
 #LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
 DATABASES = {
@@ -44,10 +47,14 @@ OPENSTACK_KEYSTONE_DEFAULT_ROLE = "<%= openstack_keystone_default_role %>"
 SWIFT_ENABLED = <%= swift_enabled %>
 SWIFT_LARGE_OBJECT_SIZE = <%= swift_large_object_size %>
 SWIFT_LARGE_OBJECT_CHUNK_SIZE = <%= swift_large_object_chunk_size %>
-
 SWIFT_ACCESS_OTHER_ACCOUNT_ENABLED = <%= swift_access_other_account %>
+#SWIFT_DEFAULT_REGION = "changeme"
 
 GAKUNIN_ENABLED =  <%= gakunin_enabled %>
+GAKUNIN_URL = "<%= gakunin_url %>"
+
+# (Note): If you want to authenticated by GAKUNIN, You must specify KEYSTONE_ADMIN_TOKEN
+# KEYSTONE_ADMIN_TOKEN="changeme"
 
 IMAGE_METADATA_GLANCE_ENABLED = <%= image_metadata_glance_enabled %>
 

@@ -217,11 +217,12 @@ class ContainerAclRemove(forms.SelfHandlingForm):
         LOG.debug('ref  %s' % refs)
 
         tenant_name = request.user.tenant_name
+        tenant_user_name = '%s:%s' % (request.user.tenant_name, request.user.username)
         LOG.debug('acl_type %s' % acl_type)
         # check ACL
         val = []
         for each_acl in groups:
-            if each_acl.startswith(tenant_name):
+            if each_acl == tenant_name or each_acl == tenant_user_name:
                 val.append(True)
             else:
                 val.append(False)
@@ -306,11 +307,12 @@ class ContainerAcl(forms.SelfHandlingForm):
         ref_result = map( lambda x: '.r:%s' % x, ref_result)
 
         tenant_name = request.user.tenant_name
+        tenant_user_name = '%s:%s' % (request.user.tenant_name, request.user.username)
         LOG.debug('acl_type %s' % acl_type)
         # check ACL
         val = []
         for each_acl in group_result:
-            if each_acl.startswith(tenant_name):
+            if each_acl == tenant_name or each_acl == tenant_user_name:
                 val.append(True)
             else:
                 val.append(False)
@@ -559,7 +561,12 @@ def acl(request, tenant_id, container_name):
 
 @login_required
 def user_list(request, tenant_id):
-    users = api.users_list_for_token_and_tenant(request, request.user.token, tenant_id)
+    try:
+        users = api.users_list_for_token_and_tenant(request, request.user.token, tenant_id)
+    except Exception, e:
+        messages.error(request, 'Unable to get user list : %s' % str(e))
+        users = None
+
     return shortcuts.render_to_response(
     'django_openstack/dash/containers/users.html', {
         'users': users,

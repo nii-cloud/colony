@@ -30,10 +30,12 @@ def set_token_for_region(request, token, region=None, unscoped=False):
             if not request.session.has_key('token_for_region'):
                 request.session['token_for_region'] = {}
             request.session['token_for_region'][region] = token.id
+            LOG.debug('token_for_region %s' % request.session['token_for_region'])
         else:
             request.session['token'] = token.id
     if not request.session.get('defaultServiceCatalog'):
         request.session['defaultServiceCatalog'] = token.serviceCatalog
+
 
 
 def auth_with_token(request, data, token_id, tenant_id = None,  region=None, session_override=True):
