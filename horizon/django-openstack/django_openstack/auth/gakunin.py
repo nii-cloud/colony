@@ -56,10 +56,6 @@ def _login_with_gakunin(request, from_email, from_eppn, region, show_error=False
                 LOG.exception('error in token_create_by_email')
                 pass
  
-        def get_first_tenant_for_user():
-            tenants = api.tenant_list_for_token(request, token.id)
-            return tenants[0] if len(tenants) else None
- 
         if not token:
             messages.error(request, "Can't retrieve information from Gakunin")
             return None
@@ -67,14 +63,10 @@ def _login_with_gakunin(request, from_email, from_eppn, region, show_error=False
         util.set_region_info(request, token, region) 
         tenant = get_first_tenant_for_user()
  
-        if not tenant:
-            messages.error(request, 'No tenants present for user')
-            return None
-
         data = {}
         data['username'] = token.user['name']
 
-        return util.auth_with_token(request, data, token.id, tenant.id, region, True)
+        return util.auth_with_token(request, data, token.id, None, region, True)
     except Exception, e:
         if show_error:
             messages.error(request, 'Exception occured while gakunin login %s' % str(e))

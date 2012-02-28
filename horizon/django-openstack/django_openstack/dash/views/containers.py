@@ -35,7 +35,7 @@ from django_openstack import api
 from django_openstack import forms
 from django_openstack.acl import parse_acl, clean_acl
 
-from cloudfiles.errors import ContainerNotEmpty, InvalidContainerName, ResponseError
+from cloudfiles.errors import ContainerNotEmpty, InvalidContainerName, ResponseError, NoSuchContainer
 
 
 LOG = logging.getLogger('django_openstack.dash')
@@ -55,6 +55,8 @@ class DeleteContainer(forms.SelfHandlingForm):
         except ResponseError, e:
             messages.error(request, 'Unable to delete container. \
                        Perhaps you do not have right permission : %s'  % str(e))
+        except NoSuchContainer, e:
+            messages.error(request, 'Unable to delete container. : %s' % str(e))
         else:
             messages.info(request,
                       'Successfully deleted container: %s' % \

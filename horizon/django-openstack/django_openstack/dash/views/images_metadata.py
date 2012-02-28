@@ -188,17 +188,10 @@ def _parse_user(url):
 
 @login_required
 def index(request, tenant_id):
-    tenant = {}
 
     form, handled = UploadMetadata.maybe_handle(request)
     if handled:
         return handled
-
-    try:
-        tenant = api.token_get_tenant(request, request.user.tenant_id)
-    except api_exceptions.ApiException, e:
-        messages.error(request, "Unable to retrienve tenant info\
-                                 from keystone: %s" % e.message)
 
     all_images = []
     try:
@@ -221,7 +214,6 @@ def index(request, tenant_id):
 
     return render_to_response(
     'django_openstack/dash/images_metadata/index.html', {
-        'tenant': tenant,
         'images': images,
         'upload_form' : form,
     }, context_instance=template.RequestContext(request))
