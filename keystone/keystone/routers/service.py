@@ -59,6 +59,11 @@ class ServiceApi(wsgi.Router):
                     action="get_tenant_users",
                     conditions=dict(method=["GET"]))
 
+        mapper.connect("/users/{user_id}/eppn",
+                    controller=user_controller,
+                    action="set_user_eppn",
+                    conditions=dict(method=["PUT"]))
+
         """
         get token by email
         add by colony.

@@ -442,7 +442,7 @@ class IdentityService(object):
             duser.email, duser.eppn, duser.enabled)
 
     def set_user_eppn(self, admin_token, user_id, user):
-        self.__validate_admin_token(admin_token)
+        self.__validate_token(admin_token)
 
         duser = api.USER.get(user_id)
         if not duser:
