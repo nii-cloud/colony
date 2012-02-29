@@ -464,7 +464,7 @@ class Dispatcher(object):
         cont_resp = self._create_container(to_req, location, 
                                            cont_prefix, each_tokens, 
                                            from_real_path_ls[1], seg_cont)
-        if cont_resp.status_int != 201 and put_cont_resp.status_int != 202:
+        if cont_resp.status_int != 201 and cont_resp.status_int != 202:
             return cont_resp
         for seg in range(max_segment):
             """ 
