@@ -18,6 +18,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from django.conf import settings
 from django.contrib import messages
 from django import shortcuts
 import openstackx
@@ -73,4 +74,4 @@ class AuthenticationMiddleware(object):
                 pass
             messages.error(request, 'Your token has expired.\
                                      Please log in again')
-            return shortcuts.redirect('/auth/logout')
+            return shortcuts.redirect(getattr(settings, 'LOGOUT_URL', '/auth/logout'))
