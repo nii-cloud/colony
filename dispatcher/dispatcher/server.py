@@ -70,6 +70,8 @@ class RelayRequest(object):
             with ConnectionTimeout(self.conn_timeout):
                 conn = http_connect_raw(host, port, method, path, 
                                         headers=headers, query_string=query_string)
+                if headers.has_key('x-copy-from'):
+                    return conn
             with Timeout(self.node_timeout):
                 resp = conn.getexpect()
             if resp.status == 100:
