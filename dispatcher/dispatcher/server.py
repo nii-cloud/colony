@@ -115,7 +115,9 @@ class RelayRequest(object):
             path = parsed.path
         self.headers['host'] = '%s:%s' % (host, port)
 
-        if self.method == 'PUT' and len(parsed.path.split('/')) == 5:
+        if self.method == 'PUT' and len(parsed.path.split('/')) >= 5:
+            if not self.headers.has_key('expect'):
+                self.headers['expect'] = '100-continue'
             chunked = self.req.headers.get('transfer-encoding')
             reader = self.req.environ['wsgi.input'].read
             data_source = iter(lambda: reader(self.chunk_size), '')
@@ -176,15 +178,16 @@ class RelayRequest(object):
             #     self.logger.info("Error: %s" % err)
             #     return HTTPGatewayTimeout(request=self.req)
 
-            # conn = self._connect_put_node(host, port, self.method, path, 
-            #                               headers=self.headers, query_string=parsed.query)
-            pile = GreenPile()
-            pile.spawn(self._connect_put_node, host, port, self.method, path, 
-                       headers=self.headers, query_string=parsed.query)
-            conns = [conn for conn in pile if conn]
-            if conns:
-                conn = conns[0]
-            else:
+            conn = self._connect_put_node(host, port, self.method, path, 
+                                          headers=self.headers, query_string=parsed.query)
+            # pile = GreenPile(1)
+            # pile.spawn(self._connect_put_node, host, port, self.method, path, 
+            #            headers=self.headers, query_string=parsed.query)
+            # conns = [conn for conn in pile if conn]
+            # if conns:
+            #     conn = conns[0]
+            # else:
+            if not conn:
                 return HTTPServiceUnavailable(request=self.req)
             with ContextPool(1) as pool:
                 conn.failed = False
