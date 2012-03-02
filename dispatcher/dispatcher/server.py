@@ -70,7 +70,7 @@ class RelayRequest(object):
             with ConnectionTimeout(self.conn_timeout):
                 conn = http_connect_raw(host, port, method, path, 
                                         headers=headers, query_string=query_string)
-                if headers.has_key('x-copy-from'):
+                if headers.has_key('content-length') and int(headers['content-length']) == 0:
                     return conn
             with Timeout(self.node_timeout):
                 resp = conn.getexpect()
@@ -104,7 +104,7 @@ class RelayRequest(object):
         if self.headers.has_key('content-length'):
             if int(self.headers['content-length']) >= MAX_FILE_SIZE:
                 return HTTPRequestEntityTooLarge(request=self.req)
-
+        
         parsed = urlparse(self.url)
         if self.proxy:
             proxy_parsed = urlparse(self.proxy)
@@ -118,124 +118,69 @@ class RelayRequest(object):
         self.headers['host'] = '%s:%s' % (host, port)
 
         if self.method == 'PUT' and len(parsed.path.split('/')) >= 5:
-            if not self.headers.has_key('expect'):
-                self.headers['expect'] = '100-continue'
+            if self.headers.has_key('content-length') and int(self.headers['content-length']) != 0:
+                if not self.headers.has_key('expect'):
+                    self.headers['expect'] = '100-continue'
             chunked = self.req.headers.get('transfer-encoding')
             reader = self.req.environ['wsgi.input'].read
             data_source = iter(lambda: reader(self.chunk_size), '')
             bytes_transferred = 0
-            # try:
-            #     with ConnectionTimeout(self.conn_timeout):
-            #         conn = http_connect_raw(host, port, self.method, path, 
-            #                                 headers=self.headers, query_string=parsed.query)
-            #     with ContextPool(1) as pool:
-            #         conn.failed = False
-            #         conn.queue = Queue(10)
-            #         pool.spawn(self._send_file, conn, path)
-            #         while True:
-            #             with ChunkReadTimeout(self.client_timeout):
-            #                 try:
-            #                     chunk = next(data_source)
-            #                 except StopIteration:
-            #                     if chunked:
-            #                         conn.queue.put('0\r\n\r\n')
-            #                     break
-            #                 except TypeError, err:
-            #                     self.logger.info('Chunk Read Error: %s' % err)
-            #                     break
-            #                 except Exception, err:
-            #                     self.logger.info('Chunk Read Error: %s' % err)
-            #                     return HTTPServerError(request=self.req)
-            #             bytes_transferred += len(chunk)
-            #             if bytes_transferred > MAX_FILE_SIZE:
-            #                 return HTTPRequestEntityTooLarge(request=self.req)
-            #             if not conn.failed:
-            #                 conn.queue.put('%x\r\n%s\r\n' % (len(chunk), chunk) if chunked else chunk)
-            #         while True:
-            #             if conn.queue.empty():
-            #                 break
-            #             else:
-            #                 sleep(0.1)
-            #         if conn.queue.unfinished_tasks:
-            #             conn.queue.join()
-            #     # In heavy condition, getresponse() may fails, so it causes 'timed out' in eventlet.greenio.
-            #     # Checking a result of response and retrying prevent it. But is this reason of the error realCly?
-            #     resp = None
-            #     with Timeout(self.node_timeout):
-            #         for i in range(self.retry_times_get_response_from_swift):
-            #             self.logger.debug('Retry counter: %s' % i)
-            #             try:
-            #                 resp = conn.getresponse()
-            #             except Exception, err:
-            #                 self.logger.info('get response of PUT Error: %s' % err)
-            #             if isinstance(resp, BufferedHTTPResponse):
-            #                 break
-            #             else:
-            #                 sleep(0.1)
-            #     return resp
-            # except ChunkReadTimeout, err:
-            #     self.logger.info("ChunkReadTimeout: %s" % err)
-            #     return HTTPRequestTimeout(request=self.req)
-            # except (Exception, TimeoutError), err:
-            #     self.logger.info("Error: %s" % err)
-            #     return HTTPGatewayTimeout(request=self.req)
-
             conn = self._connect_put_node(host, port, self.method, path, 
                                           headers=self.headers, query_string=parsed.query)
-            # pile = GreenPile(1)
-            # pile.spawn(self._connect_put_node, host, port, self.method, path, 
-            #            headers=self.headers, query_string=parsed.query)
-            # conns = [conn for conn in pile if conn]
-            # if conns:
-            #     conn = conns[0]
-            # else:
             if not conn:
                 return HTTPServiceUnavailable(request=self.req)
-            with ContextPool(1) as pool:
-                conn.failed = False
-                conn.queue = Queue(10)
-                pool.spawn(self._send_file, conn, path)
-                while True:
-                    with ChunkReadTimeout(self.client_timeout):
-                        try:
-                            chunk = next(data_source)
-                        except StopIteration:
-                            if chunked:
-                                conn.queue.put('0\r\n\r\n')
+            try:
+                with ContextPool(1) as pool:
+                    conn.failed = False
+                    conn.queue = Queue(10)
+                    pool.spawn(self._send_file, conn, path)
+                    while True:
+                        with ChunkReadTimeout(self.client_timeout):
+                            try:
+                                chunk = next(data_source)
+                            except StopIteration:
+                                if chunked:
+                                    conn.queue.put('0\r\n\r\n')
+                                break
+                            except TypeError, err:
+                                self.logger.info('Chunk Read Error: %s' % err)
+                                break
+                            except Exception, err:
+                                self.logger.info('Chunk Read Error: %s' % err)
+                                return HTTPServerError(request=self.req)
+                        bytes_transferred += len(chunk)
+                        if bytes_transferred > MAX_FILE_SIZE:
+                            return HTTPRequestEntityTooLarge(request=self.req)
+                        if not conn.failed:
+                            conn.queue.put('%x\r\n%s\r\n' % (len(chunk), chunk) if chunked else chunk)
+                    while True:
+                        if conn.queue.empty():
                             break
-                        except TypeError, err:
-                            self.logger.info('Chunk Read Error: %s' % err)
-                            break
-                        except Exception, err:
-                            self.logger.info('Chunk Read Error: %s' % err)
-                            return HTTPServerError(request=self.req)
-                    bytes_transferred += len(chunk)
-                    if bytes_transferred > MAX_FILE_SIZE:
-                        return HTTPRequestEntityTooLarge(request=self.req)
-                    if not conn.failed:
-                        conn.queue.put('%x\r\n%s\r\n' % (len(chunk), chunk) if chunked else chunk)
-                while True:
-                    if conn.queue.empty():
-                        break
-                    else:
-                        sleep(0.1)
-                if conn.queue.unfinished_tasks:
+                        else:
+                            sleep(0.1)
+                    if conn.queue.unfinished_tasks:
                         conn.queue.join()
                 # In heavy condition, getresponse() may fails, so it causes 'timed out' in eventlet.greenio.
                 # Checking a result of response and retrying prevent it. But is this reason of the error realCly?
-            resp = None
-            with Timeout(self.node_timeout):
-                for i in range(self.retry_times_get_response_from_swift):
-                    self.logger.debug('Retry counter: %s' % i)
-                    try:
-                        resp = conn.getresponse()
-                    except Exception, err:
-                        self.logger.info('get response of PUT Error: %s' % err)
-                    if isinstance(resp, BufferedHTTPResponse):
-                        break
-                    else:
-                        sleep(0.1)
-            return resp
+                resp = None
+                with Timeout(self.node_timeout):
+                    for i in range(self.retry_times_get_response_from_swift):
+                        self.logger.debug('Retry counter: %s' % i)
+                        try:
+                            resp = conn.getresponse()
+                        except Exception, err:
+                            self.logger.info('get response of PUT Error: %s' % err)
+                        if isinstance(resp, BufferedHTTPResponse):
+                            break
+                        else:
+                            sleep(0.1)
+                return resp
+            except ChunkReadTimeout, err:
+                self.logger.info("ChunkReadTimeout: %s" % err)
+                return HTTPRequestTimeout(request=self.req)
+            except (Exception, TimeoutError), err:
+                self.logger.info("Error: %s" % err)
+                return HTTPGatewayTimeout(request=self.req)
         else:
             try:
                 with ConnectionTimeout(self.conn_timeout):
@@ -546,7 +491,7 @@ class Dispatcher(object):
             server_modified-20111115.py/1321338039.34/79368/00000075
             """
             split_obj = '%s/%s/%s/%08d' % (obj, cur, obj_size, seg)
-            split_obj_name = quote(split_obj, '')
+            split_obj_name = quote(split_obj)
             chunk = body.read(self.swift_store_large_chunk_size)
             to_resp = self._create_put_req(to_req, location, 
                                            cont_prefix, each_tokens, 
@@ -911,6 +856,16 @@ class Dispatcher(object):
             else:
                 proxy = None
 
+            if req.headers.has_key('x-object-manifest'):
+                object_manifest = req.headers['x-object-manifest']
+                cont = object_manifest.split('/')[0]
+                obj = object_manifest.split('/')[1:]
+                cont_parts = cont.split(':')
+                if len(cont_parts) >= 2:
+                    real_cont = ':'.join(cont_parts[1:])
+                    object_manifest = real_cont + '/' + '/'.join(obj)
+                    req.headers['x-object-manifest'] = object_manifest
+
             self.logger.info('Request[%s]: %s %s with headers = %s, Connect to %s (via %s)' % 
                              (str(relay_id),
                               req.method, req.url, req.headers, 
@@ -962,10 +917,10 @@ class Dispatcher(object):
                                           result.getheader('Content-Length')})
             response.status = result.status
 
-        self.logger.info('Response[%s]: %s by %s %s %s' % 
-                         (str(relay_id), 
-                          response.status, req.method, req.url, 
-                          response.headers))
+            self.logger.info('Response[%s]: %s by %s %s %s' % 
+                             (str(relay_id), 
+                              response.status, req.method, req.url, 
+                              response.headers))
         return response
 
 def app_factory(global_conf, **local_conf):
