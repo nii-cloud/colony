@@ -27,7 +27,7 @@ config_item_defaults:
 
 
 component_config_defaults:
-  - path: /etc/apache2/apache2.conf
+  - path: /etc/apache2/conf.d/productname.conf
     component: colony_apache
   - path: /etc/apache2/conf.d/wsgi.conf
     component: colony_mod_wsgi
