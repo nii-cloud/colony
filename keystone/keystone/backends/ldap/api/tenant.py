@@ -1,5 +1,6 @@
 import ldap
 
+from keystone.common.utils import task_switch
 from keystone.backends.api import BaseTenantAPI
 from keystone.backends.sqlalchemy.api.tenant import TenantAPI as SQLTenantAPI
 
@@ -86,6 +87,8 @@ class TenantAPI(BaseLdapAPI, BaseTenantAPI):
             if self.use_dumb_member and user_dn == self.DUMB_MEMBER_DN:
                 continue
             res.append(self.api.user.get(self.api.user._dn_to_id(user_dn)))
+            # give a chance to other coroutint working
+            task_switch()
         return res
 
     add_redirects(locals(), SQLTenantAPI, ['get_all_endpoints'])
