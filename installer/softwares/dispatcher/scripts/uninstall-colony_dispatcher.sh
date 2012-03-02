@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source common/function.sh
+
 echo 'Uninstalling colony_dispatcher'
 
 basedir=/usr/local/bin
@@ -22,3 +24,5 @@ if test -f  $cwd/softwares/dispatcher/data/install-templates.txt ; then
        rm -rf $template
    done
 fi
+
+remove_templates "dispatcher" "colony_dispatcher"
