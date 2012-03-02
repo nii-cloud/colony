@@ -1,6 +1,7 @@
 import ast
 import ldap
 from itertools import izip, count
+from keystone.utils import task_switch
 
 
 def _get_redirect(cls, method):
@@ -86,6 +87,8 @@ class BaseLdapAPI(object):
             query = '(&%s%s)' % (filter, query)
         try:
             res = conn.search_s(self._id_to_dn(id), ldap.SCOPE_BASE, query)
+            task_switch()
+            return res
         except ldap.NO_SUCH_OBJECT:
             return None
         try:
@@ -99,7 +102,9 @@ class BaseLdapAPI(object):
         if filter is not None:
             query = '(&%s%s)' % (filter, query)
         try:
-            return conn.search_s(self.tree_dn, ldap.SCOPE_ONELEVEL, query)
+            ret = conn.search_s(self.tree_dn, ldap.SCOPE_ONELEVEL, query)
+            task_switch()
+            return ret
         except ldap.NO_SUCH_OBJECT:
             return []
 
