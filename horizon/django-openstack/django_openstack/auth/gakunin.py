@@ -61,7 +61,6 @@ def _login_with_gakunin(request, from_email, from_eppn, region, show_error=False
             return None
 
         util.set_region_info(request, token, region) 
-        tenant = get_first_tenant_for_user()
  
         data = {}
         data['username'] = token.user['name']

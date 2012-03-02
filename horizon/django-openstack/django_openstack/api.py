@@ -1058,6 +1058,8 @@ def swift_copy_object(request, orig_container_name, orig_object_name,
     orig_container_name = orig_container_name.replace('/', '%2F')
     orig_object_name = orig_object_name.replace('/', '%2F')
 
+    # set timeout configurable
+    new_obj.container.conn.timeout = getattr(settings, "SWIFT_COPY_OBJECT_TIMEOUT", 5)
     return new_obj.copy_from(quote(orig_container_name), quote(orig_object_name))
 
 def swift_upload_object(request, container_name, object_name, object_data, storage_url=None):
@@ -1081,9 +1083,8 @@ def swift_upload_object_with_manifest(request, container_name, object_name, obje
     seq = 0
     file_time = time.time()
     for buf in object_data.chunks(settings.SWIFT_LARGE_OBJECT_CHUNK_SIZE):
-        LOG.info('upload seq %d' % seq)
+        LOG.debug('upload seq %d' % seq)
         path = '%s/%s/%s/%08d' % (object_name, file_time, object_data.size, seq)
-        path = quote(path, '')
         obj = c.create_object(path)
         obj.write(buf)
         seq = seq + 1
@@ -1091,10 +1092,35 @@ def swift_upload_object_with_manifest(request, container_name, object_name, obje
     manifest_obj = container.create_object(object_name)
     manifest_obj.content_type = object_data.content_type
     manifest_obj.size = object_data.size
-    objpath= '%s/%s/%s' % (object_name, file_time, object_data.size)
-    manifest_obj.manifest = '%s/%s' % (seq_cont, quote(objpath, ''))
-    LOG.info('manifest %s/%s' % (seq_cont, quote(objpath, '')))
-    manifest_obj.sync_manifest()
+    # cloudfiles in Ubuntu 11.10 doesn't send PUT but POST
+    manifest_obj.write('')
+    objpath= '%s/%s/%s/' % (object_name, file_time, object_data.size)
+    manifest_obj.manifest = '%s/%s' % (seq_cont, objpath)
+    LOG.debug('manifest %s/%s' % (seq_cont, quote(objpath)))
+    try:
+        orig_func = httplib.HTTPConnection._send_output
+        # dirty hack for multibyte container/object from httplib 2.7
+        def _send_output_hack(self, message_body=None):
+            self._buffer = map( lambda x: x.decode('utf-8'), self._buffer )
+            self._buffer.extend(("", ""))
+            msg = "\r\n".join(self._buffer)
+            msg = msg.encode('utf-8')
+            del self._buffer[:]
+            if isinstance(message_body, str):
+                msg += message_body
+                message_body = None
+            self.send(msg)
+            if message_body is not None:
+                #message_body was not a string (i.e. it is a file) and
+                #we must run the risk of Nagle
+                self.send(message_body)
+
+        httplib.HTTPConnection._send_output = _send_output_hack
+        manifest_obj.sync_manifest()
+        httplib.HTTPConnection._send_output = orig_func
+    except Exception, e:
+        LOG.exception('sync_manifest')
+        httplib.HTTPConnection._send_output = orig_func
 
 
 def swift_delete_object(request, container_name, object_name, storage_url=None):

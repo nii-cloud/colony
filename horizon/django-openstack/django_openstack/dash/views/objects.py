@@ -22,6 +22,7 @@
 Views for managing Swift containers.
 """
 import logging
+import socket
 
 try:
     from cStringIO import StringIO
@@ -156,8 +157,8 @@ class CopyObject(forms.SelfHandlingForm):
 
         escaped = {}
         for key, value in values.iteritems():
-            #escaped[key] = value.encode('utf-8').replace('/', '%2F')
-            escaped[key] = value.encode('utf-8')
+            escaped[key] = value.encode('utf-8').replace('/', '%2F')
+            #escaped[key] = value.encode('utf-8')
 
 
         try:
@@ -173,6 +174,10 @@ class CopyObject(forms.SelfHandlingForm):
             messages.error(request, 'Object copy is failed. %s' % str(e))
         except ResponseError, e:
             messages.error(request, 'Object copy is failed. %s' % str(e))
+        except socket.timeout, e:
+            messages.info(request,
+                          'Object is being copied to %s/%s. Please check it later' %
+                            (values['new_cont'], values['new_obj']))
         except Exception, e:
             LOG.exception('object copy is failed')
             messages.error(request, 'Object copy is failed. %s' % str(e))
