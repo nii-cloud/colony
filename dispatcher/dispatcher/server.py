@@ -65,11 +65,12 @@ class RelayRequest(object):
                 return None, None
         return host, port
 
-    def _connect_put_node(self, host, port, method, path, headers, query_string):
+    def _connect_put_node(self, host, port, method, path, headers, query_string, ssl=False):
         try:
             with ConnectionTimeout(self.conn_timeout):
                 conn = http_connect_raw(host, port, method, path, 
-                                        headers=headers, query_string=query_string)
+                                        headers=headers, query_string=query_string,
+                                        ssl=ssl)
                 if headers.has_key('content-length') and int(headers['content-length']) == 0:
                     return conn
             with Timeout(self.node_timeout):
@@ -112,9 +113,11 @@ class RelayRequest(object):
         if self._proxy_request_check(parsed.path):
             host, port = self.split_netloc(proxy_parsed)
             path = self.url
+            ssl = True if proxy_parsed.scheme == 'https' else False
         else:
             host, port = self.split_netloc(parsed)
             path = parsed.path
+            ssl = True if parsed.scheme == 'https' else False
         self.headers['host'] = '%s:%s' % (host, port)
 
         if self.method == 'PUT' and len(parsed.path.split('/')) >= 5:
@@ -125,11 +128,12 @@ class RelayRequest(object):
             reader = self.req.environ['wsgi.input'].read
             data_source = iter(lambda: reader(self.chunk_size), '')
             bytes_transferred = 0
-            conn = self._connect_put_node(host, port, self.method, path, 
-                                          headers=self.headers, query_string=parsed.query)
-            if not conn:
-                return HTTPServiceUnavailable(request=self.req)
             try:
+                conn = self._connect_put_node(host, port, self.method, path, 
+                                              headers=self.headers, query_string=parsed.query,
+                                              ssl=ssl)
+                if not conn:
+                    return HTTPServiceUnavailable(request=self.req)
                 with ContextPool(1) as pool:
                     conn.failed = False
                     conn.queue = Queue(10)
@@ -185,7 +189,8 @@ class RelayRequest(object):
             try:
                 with ConnectionTimeout(self.conn_timeout):
                     conn = http_connect_raw(host, port, self.method, path, 
-                                            headers=self.headers, query_string=parsed.query)
+                                            headers=self.headers, query_string=parsed.query,
+                                            ssl=ssl)
                 with Timeout(self.node_timeout):
                     return conn.getresponse()
             except (Exception, TimeoutError), err:
