@@ -566,7 +566,8 @@ class Dispatcher(object):
             path = req.path.split('/')[2:]
         else:
             path = req.path.split('/')[1:]
-        return [p for p in path if p]
+        #return [p for p in path if p]
+        return path
 
     def _auth_check(self, req):
         if 'x-auth-token' in req.headers or 'x-storage-token' in req.headers:
@@ -871,6 +872,8 @@ class Dispatcher(object):
                     object_manifest = real_cont + '/' + '/'.join(obj)
                     req.headers['x-object-manifest'] = object_manifest
 
+            original_url = req.url
+
             self.logger.info('Request[%s]: %s %s with headers = %s, Connect to %s (via %s)' % 
                              (str(relay_id),
                               req.method, req.url, req.headers, 
@@ -891,6 +894,24 @@ class Dispatcher(object):
                     continue
                 else:
                     return result
+
+            if result.getheader('location'):
+                location = result.getheader('location')
+                parsed_location = urlparse(location)
+                parsed_connect_url = urlparse(connect_url)
+                if parsed_location.netloc.startswith(parsed_connect_url.netloc):
+                    parsed_orig_url = urlparse(original_url)
+                    loc_prefix = parsed_orig_url.path.split('/')[1]
+                    if parsed_orig_url.path.split('/')[1] != self.req_version_str:
+                        rewrited_path = '/' + loc_prefix + parsed_location.path
+                    else:
+                        rewrited_path = parsed_location.path
+                    rewrited_location = (parsed_orig_url.scheme,
+                                         parsed_orig_url.netloc,
+                                         rewrited_path,
+                                         parsed_location.params,
+                                         parsed_location.query,
+                                         parsed_location.fragment)
 
             response = Response(status='%s %s' % (result.status, result.reason))
             response.bytes_transferred = 0
@@ -920,6 +941,8 @@ class Dispatcher(object):
             if req.method == 'HEAD':
                 update_headers(response, {'Content-Length': 
                                           result.getheader('Content-Length')})
+            if result.getheader('location'):
+                update_headers(response, {'Location': urlunparse(rewrited_location)})
             response.status = result.status
 
             self.logger.info('Response[%s]: %s by %s %s %s' % 
