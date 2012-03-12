@@ -57,7 +57,7 @@ pipeline = healthcheck cache swift3 keystone proxy-server
 use = egg:keystone#tokenauth_colony
 keystone_url = http://172.30.112.168:5000
 region_name = RegionOne
-admin_role = Admin
+admin_role = admin
 memcache_expire = 86400
 
 """
@@ -102,7 +102,7 @@ class AuthProtocol(object):
         self.auth_protocol = parsed.scheme
         self.auth_location = keystone_url
         self.region_name = conf.get('region_name')
-        self.admin_role = conf.get('admin_role', 'Admin')
+        self.admin_role = conf.get('admin_role', 'admin')
         # for ACL setting for containers of an account which others possesses.
         self.across_account = conf.get('across_account', 'yes').lower() in TRUE_VALUES
         self.memcache_expire = float(conf.get('memcache_expire', 86400))
@@ -323,6 +323,9 @@ class AuthProtocol(object):
         # Any user GET or HEAD account
         if req.method in ['HEAD', 'GET'] and not container:
             self.logger.debug('HEAD or GET account all ok')
+            return None
+        if req.method in ['PUT', 'DELETE'] and not container and self.admin_role in user_groups:
+            self.logger.debug('PUT or DELETE account by admin_role ok')
             return None
         # Getting container acls for container writing request,
         #  because PUT/POST/DELETE container doesn't return container acls.

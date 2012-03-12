@@ -23,6 +23,7 @@ import os
 import sys
 import time
 from cStringIO import StringIO
+from uuid import uuid4
 
 class RelayRequest(object):
     """ """
@@ -64,6 +65,25 @@ class RelayRequest(object):
                 return None, None
         return host, port
 
+    def _connect_put_node(self, host, port, method, path, headers, query_string, ssl=False):
+        try:
+            with ConnectionTimeout(self.conn_timeout):
+                conn = http_connect_raw(host, port, method, path, 
+                                        headers=headers, query_string=query_string,
+                                        ssl=ssl)
+                if headers.has_key('content-length') and int(headers['content-length']) == 0:
+                    return conn
+            with Timeout(self.node_timeout):
+                resp = conn.getexpect()
+            if resp.status == 100:
+                return conn
+            elif resp.status == 507:
+                self.logger.error('507 Insufficient Storage in %s:%s%s' % (host, port, path))
+                raise Exception
+        except:
+            self.logger.error('Expect: 100-continue on %s:%s%s' % (host, port, path))
+            return None
+
     def _send_file(self, conn, path):
         """Method for a file PUT coro"""
         while True:
@@ -85,7 +105,7 @@ class RelayRequest(object):
         if self.headers.has_key('content-length'):
             if int(self.headers['content-length']) >= MAX_FILE_SIZE:
                 return HTTPRequestEntityTooLarge(request=self.req)
-
+        
         parsed = urlparse(self.url)
         if self.proxy:
             proxy_parsed = urlparse(self.proxy)
@@ -93,24 +113,27 @@ class RelayRequest(object):
         if self._proxy_request_check(parsed.path):
             host, port = self.split_netloc(proxy_parsed)
             path = self.url
+            ssl = True if proxy_parsed.scheme == 'https' else False
         else:
             host, port = self.split_netloc(parsed)
             path = parsed.path
+            ssl = True if parsed.scheme == 'https' else False
         self.headers['host'] = '%s:%s' % (host, port)
 
-        if self.method == 'PUT' and len(parsed.path.split('/')) == 5:
+        if self.method == 'PUT' and len(parsed.path.split('/')) >= 5:
+            if self.headers.has_key('content-length') and int(self.headers['content-length']) != 0:
+                if not self.headers.has_key('expect'):
+                    self.headers['expect'] = '100-continue'
             chunked = self.req.headers.get('transfer-encoding')
             reader = self.req.environ['wsgi.input'].read
             data_source = iter(lambda: reader(self.chunk_size), '')
             bytes_transferred = 0
-            # pile = GreenPile()
-            # pile.spawn(self._connect_server, host, port, self.method, path, self.headers, parsed.query)
-            # conns = [conn for conn in pile if conn]
-            # conn = conns[0]
             try:
-                with ConnectionTimeout(self.conn_timeout):
-                    conn = http_connect_raw(host, port, self.method, path, 
-                                            headers=self.headers, query_string=parsed.query)
+                conn = self._connect_put_node(host, port, self.method, path, 
+                                              headers=self.headers, query_string=parsed.query,
+                                              ssl=ssl)
+                if not conn:
+                    return HTTPServiceUnavailable(request=self.req)
                 with ContextPool(1) as pool:
                     conn.failed = False
                     conn.queue = Queue(10)
@@ -142,7 +165,7 @@ class RelayRequest(object):
                     if conn.queue.unfinished_tasks:
                         conn.queue.join()
                 # In heavy condition, getresponse() may fails, so it causes 'timed out' in eventlet.greenio.
-                # Checking a result of response and retrying prevent it. But is this reason of the error really?
+                # Checking a result of response and retrying prevent it. But is this reason of the error realCly?
                 resp = None
                 with Timeout(self.node_timeout):
                     for i in range(self.retry_times_get_response_from_swift):
@@ -166,7 +189,8 @@ class RelayRequest(object):
             try:
                 with ConnectionTimeout(self.conn_timeout):
                     conn = http_connect_raw(host, port, self.method, path, 
-                                            headers=self.headers, query_string=parsed.query)
+                                            headers=self.headers, query_string=parsed.query,
+                                            ssl=ssl)
                 with Timeout(self.node_timeout):
                     return conn.getresponse()
             except (Exception, TimeoutError), err:
@@ -464,7 +488,7 @@ class Dispatcher(object):
         cont_resp = self._create_container(to_req, location, 
                                            cont_prefix, each_tokens, 
                                            from_real_path_ls[1], seg_cont)
-        if cont_resp.status_int != 201 and put_cont_resp.status_int != 202:
+        if cont_resp.status_int != 201 and cont_resp.status_int != 202:
             return cont_resp
         for seg in range(max_segment):
             """ 
@@ -472,7 +496,7 @@ class Dispatcher(object):
             server_modified-20111115.py/1321338039.34/79368/00000075
             """
             split_obj = '%s/%s/%s/%08d' % (obj, cur, obj_size, seg)
-            split_obj_name = quote(split_obj, '')
+            split_obj_name = quote(split_obj)
             chunk = body.read(self.swift_store_large_chunk_size)
             to_resp = self._create_put_req(to_req, location, 
                                            cont_prefix, each_tokens, 
@@ -542,7 +566,8 @@ class Dispatcher(object):
             path = req.path.split('/')[2:]
         else:
             path = req.path.split('/')[1:]
-        return [p for p in path if p]
+        #return [p for p in path if p]
+        return path
 
     def _auth_check(self, req):
         if 'x-auth-token' in req.headers or 'x-storage-token' in req.headers:
@@ -820,6 +845,8 @@ class Dispatcher(object):
                 relay_addr, relay_port = svr
             return relay_addr, relay_port
 
+        relay_id = str(uuid4())
+
         parsed_req_url = urlparse(req_url)
         relay_servers_count = len(relay_servers)
         for relay_server in relay_servers:
@@ -835,8 +862,22 @@ class Dispatcher(object):
             else:
                 proxy = None
 
-            self.logger.debug('Req: %s %s, Connect to %s via %s' % 
-                             (req.method, req.url, connect_url, proxy))
+            if req.headers.has_key('x-object-manifest'):
+                object_manifest = req.headers['x-object-manifest']
+                cont = object_manifest.split('/')[0]
+                obj = object_manifest.split('/')[1:]
+                cont_parts = cont.split(':')
+                if len(cont_parts) >= 2:
+                    real_cont = ':'.join(cont_parts[1:])
+                    object_manifest = real_cont + '/' + '/'.join(obj)
+                    req.headers['x-object-manifest'] = object_manifest
+
+            original_url = req.url
+
+            self.logger.info('Request[%s]: %s %s with headers = %s, Connect to %s (via %s)' % 
+                             (str(relay_id),
+                              req.method, req.url, req.headers, 
+                              connect_url, proxy))
 
             result = RelayRequest(self.conf, req, connect_url, proxy=proxy, 
                                   conn_timeout=self.conn_timeout, 
@@ -846,11 +887,31 @@ class Dispatcher(object):
             if isinstance(result, HTTPException):
                 if relay_servers_count > 1:
                     relay_servers_count -= 1
-                    self.logger.info('Retry Req: %s %s, Connect to %s via %s' %
-                                     (req.method, req.url, connect_url, proxy))
+                    self.logger.info('Retry Req[%s]: %s %s with headers = %s, Connect to %s (via %s)' % 
+                                     (str(relay_id),
+                                      req.method, req.url, req.headers, 
+                                      connect_url, proxy))
                     continue
                 else:
                     return result
+
+            if result.getheader('location'):
+                location = result.getheader('location')
+                parsed_location = urlparse(location)
+                parsed_connect_url = urlparse(connect_url)
+                if parsed_location.netloc.startswith(parsed_connect_url.netloc):
+                    parsed_orig_url = urlparse(original_url)
+                    loc_prefix = parsed_orig_url.path.split('/')[1]
+                    if parsed_orig_url.path.split('/')[1] != self.req_version_str:
+                        rewrited_path = '/' + loc_prefix + parsed_location.path
+                    else:
+                        rewrited_path = parsed_location.path
+                    rewrited_location = (parsed_orig_url.scheme,
+                                         parsed_orig_url.netloc,
+                                         rewrited_path,
+                                         parsed_location.params,
+                                         parsed_location.query,
+                                         parsed_location.fragment)
 
             response = Response(status='%s %s' % (result.status, result.reason))
             response.bytes_transferred = 0
@@ -880,7 +941,14 @@ class Dispatcher(object):
             if req.method == 'HEAD':
                 update_headers(response, {'Content-Length': 
                                           result.getheader('Content-Length')})
+            if result.getheader('location'):
+                update_headers(response, {'Location': urlunparse(rewrited_location)})
             response.status = result.status
+
+            self.logger.info('Response[%s]: %s by %s %s %s' % 
+                             (str(relay_id), 
+                              response.status, req.method, req.url, 
+                              response.headers))
         return response
 
 def app_factory(global_conf, **local_conf):
