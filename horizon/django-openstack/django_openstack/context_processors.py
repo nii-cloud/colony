@@ -36,7 +36,7 @@ def tenants(request):
         except api.ServiceCatalogException, e:
             tenants = api.tenant_list_for_token(request, request.user.token)
         return {'tenants': tenants }
-    except api_exceptions.BadRequest, e:
+    except Exception, e:
         messages.error(request, "Unable to retrieve tenant list from\
                                   keystone: %s" % e.message)
         return {'tenants': []}

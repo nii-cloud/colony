@@ -17,7 +17,7 @@
       <td>{{image.status|capfirst}}</td>
       <td id="actions">
         <ul>
-      {% if image.owner == request.user.username %}
+      {% if image.properties and image.properties.user_id == request.user.username  or image.owner == request.user.username%}
           <li><a href="{% url dash_metadata_update request.user.tenant_id image.id %}">Edit</a></li>
       {% endif %}
 

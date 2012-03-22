@@ -185,7 +185,7 @@ class Image(APIDictWrapper):
 class ImageProperties(APIDictWrapper):
     """Simple wrapper around glance image properties dictionary"""
     _attrs = ['architecture', 'image_location', 'image_state', 'kernel_id',
-             'project_id', 'ramdisk_id']
+             'project_id', 'ramdisk_id', 'user_id']
 
 
 class KeyPair(APIResourceWrapper):
@@ -506,9 +506,9 @@ def admin_api(request):
 
 def gakunin_api(request, region=None):
     try:
-        url = url_for_with_slash(request, 'identity', True, region)
+        url = url_for_with_slash(request, 'identity', False, region)
     except ServiceCatalogException, ex:
-        url = settings.OPENSTACK_KEYSTONE_ADMIN_URL.rstrip('/') + '/'
+        url = settings.OPENSTACK_KEYSTONE_URL.rstrip('/') + '/'
 
     tokens_for_gakunin = getattr(settings, "TOKENS_FOR_GAKUNIN", None)
     if tokens_for_gakunin and region and tokens_for_gakunin.has_key(region):
@@ -546,7 +546,7 @@ def auth_api_with_request(request, region=None):
     try:
         url = url_for_with_slash(request, 'identity', False, region)
     except ServiceCatalogException, ex:
-        url = settings.OPENSTACK_KEYSTONE_URL.rstrip('/')
+        url = settings.OPENSTACK_KEYSTONE_URL.rstrip('/') + '/'
 
     LOG.info('auth_api_with_request for region %s using url %s' % (region, url))
     return openstackx.auth.Auth(management_url=url)
@@ -1066,11 +1066,7 @@ def swift_upload_object(request, container_name, object_name, object_data, stora
     container = swift_api(request, storage_url).get_container(container_name)
     obj = container.create_object(object_name)
     obj.content_type = object_data.content_type
-    if object_data.multiple_chunks():
-        for buf in object_data.chunks(settings.SWIFT_LARGE_OBJECT_CHUNK_SIZE):
-            obj.write(buf)
-    else:
-        obj.write(object_data.read())
+    obj.write(object_data.read())
 
 def swift_upload_object_with_manifest(request, container_name, object_name, object_data, storage_url=None):
 
@@ -1082,6 +1078,13 @@ def swift_upload_object_with_manifest(request, container_name, object_name, obje
     container = swift_api(request, storage_url).get_container(container_name)
     seq = 0
     file_time = time.time()
+
+    try:
+        object_name.encode('ascii')
+    except UnicodeEncodeError, e:
+        raise Exception('We cannot upload multibyte object more than %d bytes due to swift implementation'
+                         % settings.SWIFT_LARGE_OBJECT_SIZE)
+
     for buf in object_data.chunks(settings.SWIFT_LARGE_OBJECT_CHUNK_SIZE):
         LOG.debug('upload seq %d' % seq)
         path = '%s/%s/%s/%08d' % (object_name, file_time, object_data.size, seq)
@@ -1092,7 +1095,7 @@ def swift_upload_object_with_manifest(request, container_name, object_name, obje
     manifest_obj = container.create_object(object_name)
     manifest_obj.content_type = object_data.content_type
     manifest_obj.size = object_data.size
-    # cloudfiles in Ubuntu 11.10 doesn't send PUT but POST
+    # cloudfiles with ubuntu 11.10 doesn't send PUT but POST
     manifest_obj.write('')
     objpath= '%s/%s/%s/' % (object_name, file_time, object_data.size)
     manifest_obj.manifest = '%s/%s' % (seq_cont, objpath)

@@ -30,6 +30,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django import shortcuts
 from django.core import validators
+from django.views.decorators.cache import cache_control
 
 from django_openstack import api
 from django_openstack import forms
@@ -141,7 +142,7 @@ class ContainerMetaRemove(forms.SelfHandlingForm):
             except ResponseError, e:
                 messages.error(request, 'Unable to remove metadata from container : %s' % str(e))
 
-        return shortcuts.redirect(request.build_absolute_uri())
+        return None
 
 class ContainerMeta(forms.SelfHandlingForm):
     ''' Form that handles Swift Container Meta Data '''
@@ -178,7 +179,7 @@ class ContainerMeta(forms.SelfHandlingForm):
         except Exception, e:
             messages.error(request, 'Unable to setting Container Meta Information is failed: %s' % str(e))
 
-        return shortcuts.redirect(request.build_absolute_uri())
+        return None
 
 class ContainerAclRemove(forms.SelfHandlingForm):
     container_name = forms.CharField(widget=forms.HiddenInput())
@@ -361,9 +362,9 @@ class MakePublicContainer(forms.SelfHandlingForm):
             if name == 'x-container-meta-web-index':
                 self.fields['public_html'].initial = True
                 self.fields['index_object_name'].initial = ( value, value)
-            if name == 'x-container-meta-web-listing':
+            if name == 'x-container-meta-web-listings':
                 self.fields['html_listing'].initial = value == 'true'
-            if name == 'x-container-meta-web-listing-css':
+            if name == 'x-container-meta-web-listings-css':
                 self.fields['use_css_in_listing'].initial = True
                 self.fields['css_object_name'].initial = ( value, value )
             if name == 'x-container-meta-web-error':
@@ -375,17 +376,22 @@ class MakePublicContainer(forms.SelfHandlingForm):
         css_object_name = data['css_object_name']
         public_html = data['public_html']
         error = data['error']
+        try:
+            error = error.encode('ascii')
+        except Exception, e:
+            messages.error(request, 'Container Public contains non-ASCII character %s' % str(e))
+            return
         html_listing = data['html_listing']
         use_css_in_listing = data['use_css_in_listing']
         container_name = data['container_name']
-        for name in ['Index', 'Listing', 'Listing-Css', 'Error']:
+        for name in ['Index', 'Listings', 'Listings-Css', 'Error']:
            hdrs['X-Container-Meta-Web-' + name] = ''
         if public_html:
            hdrs['X-Container-Meta-Web-Index'] = index_object_name
         if html_listing:
-           hdrs['X-Container-Meta-Web-Listing'] = 'true'
+           hdrs['X-Container-Meta-Web-Listings'] = 'true'
         if use_css_in_listing:
-           hdrs['X-Container-Meta-Web-Listing-Css'] = css_object_name
+           hdrs['X-Container-Meta-Web-Listings-Css'] = css_object_name
         if error:
            hdrs['X-Container-Meta-Web-Error'] = error
 
@@ -431,10 +437,12 @@ def _index(request, tenant_id, expire_session):
     }, context_instance=template.RequestContext(request))
 
 
+@cache_control(must_revalidate=True, max_age=0, no_cache=True)
 @login_required
 def index_storage_url(request, tenant_id):
     return _index(request, tenant_id, False)
 
+@cache_control(must_revalidate=True, max_age=0, no_cache=True)
 @login_required
 def index(request, tenant_id):
     return _index(request, tenant_id, True)
