@@ -24,6 +24,8 @@ config_item_defaults:
     value: "cert/sp-key.pem"
   - name: credential_resolver_certificate
     value: "cert/sp-cert.pem"
+    name: horizon_base_dir
+    value: "/etc/horizon"
 
 
 component_config_defaults:

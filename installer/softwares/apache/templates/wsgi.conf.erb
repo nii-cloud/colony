@@ -12,13 +12,13 @@
 #################################################################################
 
 <IfModule mod_wsgi.c>
-WSGIScriptAlias /horizon /usr/local/share/dash/dashboard/wsgi/django.wsgi
-WSGIDaemonProcess horizon python-path=/usr/local/share/dash/:/usr/local/share/dash/dashboard 
+WSGIScriptAlias /horizon <%= horizon_base_dir %>/dashboard/wsgi/django.wsgi
+WSGIDaemonProcess horizon python-path=<%= horizon_base_dir %>:<%= horizon_base_dir %>/dashboard 
 
 WSGIProcessGroup horizon
 
-Alias /horizon/static/ /usr/local/share/dash/dashboard/static/
-Alias /horizon/media/ /usr/local/share/dash/dashboard/media/
+Alias /horizon/static/ <%= horizon_base_dir %>/dashboard/static/
+Alias /horizon/media/ <%= horizon_base_dir %>/dashboard/media/
 
 <Directory /usr/local/share/dash/dashboard/wsgi>
   Order allow,deny
