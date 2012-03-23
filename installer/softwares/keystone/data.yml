@@ -26,6 +26,8 @@ config_item_defaults:
 component_config_defaults:
   - path: /etc/keystone.conf
     component: colony_keystone
+  - path: /etc/init/keystone-init.conf
+    component: colony_keystone
 
 software_config_defaults:
 

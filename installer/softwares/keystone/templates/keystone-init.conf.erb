@@ -1,0 +1,10 @@
+description "Keystone API server"
+author "Soren Hansen <soren@linux2go.dk>"
+
+start on (local-filesystems and net-device-up IFACE!=lo)
+stop on runlevel [016]
+
+respawn
+
+exec su -c "/usr/local/bin/keystone --log-dir=/var/log/keystone --log-file=api.log" keystone
+#exec su -c "/usr/bin/keystone --log-dir=/var/log/keystone --log-file=api.log" keystone

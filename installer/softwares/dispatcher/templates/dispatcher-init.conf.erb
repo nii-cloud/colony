@@ -1,0 +1,9 @@
+description "colony dispatcher"
+author "YUZAWA Takahiko <yuzawataka@intellilink.co.jp>"
+
+start on (local-filesystems and net-device-up IFACE!=lo)
+stop on runlevel [016]
+
+respawn
+
+exec /usr/local/bin/dispatcher /etc/dispatcher/dispatcher.conf
