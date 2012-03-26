@@ -566,8 +566,7 @@ class Dispatcher(object):
             path = req.path.split('/')[2:]
         else:
             path = req.path.split('/')[1:]
-        #return [p for p in path if p]
-        return path
+        return [p for p in path if p]
 
     def _auth_check(self, req):
         if 'x-auth-token' in req.headers or 'x-storage-token' in req.headers:
@@ -849,11 +848,16 @@ class Dispatcher(object):
 
         parsed_req_url = urlparse(req_url)
         relay_servers_count = len(relay_servers)
+
+        connect_path = '/' + '/'.join(path_str_ls)
+        if parsed_req_url.path.endswith('/'):
+            connect_path = connect_path + '/'
+
         for relay_server in relay_servers:
             relay_addr, relay_port = get_relay_netloc(relay_server)
             connect_url = urlunparse((parsed_req_url.scheme, 
                                       relay_addr + ':' + relay_port, 
-                                      '/' + '/'.join(path_str_ls),
+                                      connect_path,
                                       parsed_req_url.params, 
                                       parsed_req_url.query, 
                                       parsed_req_url.fragment))
