@@ -43,6 +43,7 @@ from glance.common import exception as glance_exception
 from lxml import etree
 from novaclient import exceptions as novaclient_exceptions
 from openstackx.api import exceptions as api_exceptions
+from urllib import quote
 
 
 LOG = logging.getLogger('django_openstack.dash.views.images_metadata')
@@ -62,7 +63,23 @@ class UpdateImageForm(forms.SelfHandlingForm):
         error_updating = _('Error updating image with id: %s' % image_id)
 
         scheme, loc, path = _parse_location(data['location'])
-        auth = ":".join([data['user'] , data['password']])
+        auth = ":".join([data['user'], data['password']])
+
+        image_name = data['name']
+        try:
+            check_name = "Image name"
+            image_name.encode('ascii')
+            check_name = "User"
+            data['user'].encode('ascii')
+            check_name = "Password"
+            data['password'].encode('ascii')
+        except UnicodeEncodeError, e:
+            messages.error(request, "%s contains non ASCII character: %s" 
+                          % (check_name, str(e)))
+            return
+
+        location = "%s://%s@%s%s" % (scheme, auth, loc, quote(path))
+           
 
         try:
             image = api.image_get_meta(request, image_id)
@@ -74,12 +91,16 @@ class UpdateImageForm(forms.SelfHandlingForm):
             LOG.exception(error_retrieving)
             messages.error(request, error_retrieving)
 
-        if image.owner == request.user.username:
+        if image.owner == request.user.username or image.properties.get('user_id') == request.user.username:
             try:
+                prop = {}
+                for key in ['architecture', 'image_location', 'image_state', 'kernel_id', 'project_id', 'ramdisk_id', 'user_id']:
+                    prop[key] = image.properties.get(key)
                 meta = {
                     'is_public': True,
-                    'name': data['name'],
-                    'location' : "%s://%s@%s%s" % (scheme, auth, loc, path)
+                    'name': image_name,
+                    'location' : "%s://%s@%s%s" % (scheme, auth, loc, path),
+                    'properties' : prop
                 }
                 api.image_update(request, image_id, meta)
                 messages.success(request, _('Image was successfully updated.'))
@@ -109,6 +130,12 @@ class UploadMetadata(forms.SelfHandlingForm):
             messages.error(request, 'Metadata content is too big (more than 256MB)')
 
         data = self.files['image_meta_file'].read()
+
+        try:
+           data.encode('ascii')
+        except UnicodeEncodeError, e:
+           messages.error(request, 'Metadata content contains non ASCII character : %s' % str(e))
+           return
 
         try:
             root = etree.XML(data)
@@ -144,6 +171,7 @@ class UploadMetadata(forms.SelfHandlingForm):
                 name = property.findtext('name')
                 value = property.findtext('value')
                 prop[name] = value
+        prop['user_id'] = request.user.username
         meta['properties'] = prop
 
         meta_send = {}
@@ -177,7 +205,10 @@ def _parse_location(url):
 
 def _parse_user(url):
     image_loc = urlparse.urlparse(url)
-    creds = image_loc.netloc.split('@', 1)[0]
+    credslist = image_loc.netloc.split('@', 1)
+    if len(credslist) == 1:
+        return None
+    creds = credslist[0]
     creds_list = creds.split(':')
     if len(creds_list) == 1:
         return ''.join(creds_list)
@@ -208,6 +239,10 @@ def index(request, tenant_id):
         msg = "Unable to retreive image info from glance: %s" % str(e)
         LOG.exception(msg)
         messages.error(request, msg)
+    except Exception, e:
+        msg = "Unable to retreive image info from glance: %s" % str(e)
+        LOG.exception(msg)
+        messages.error(request, msg)
 
     images = [im for im in all_images
               if im['container_format'] not in ['aki', 'ari']]
@@ -233,6 +268,11 @@ def download(request, tenant_id, image_id):
         msg = "Unable to retreive image info from glance: %s" % str(e)
         LOG.exception(msg)
         messages.error(request, msg)
+    except Exception, e:
+        msg = "Unable to retreive image info from glance: %s" % str(e)
+        LOG.exception(msg)
+        messages.error(request, msg)
+
 
     if not image:
         return shortcuts.redirect('dash_images_metadata', tenant_id)
@@ -300,13 +340,18 @@ def update(request, tenant_id, image_id):
         LOG.exception('Error retrieving image with id "%s"' % image_id)
         messages.error(request, "Error retrieving image %s: %s"
                                  % (image_id, e.message))
+    except Exception, e:
+        LOG.exception('Error retrieving image with id "%s"' % image_id)
+        messages.error(request, "Error retrieving image %s: %s"
+                                 % (image_id, str(e)))
 
     scheme, location, path = _parse_location(image.location)
+    user = _parse_user(image.location)
     form, handled = UpdateImageForm.maybe_handle(request, initial={
                  'image_id': image_id,
                  'name': image.get('name', ''),
                  'location' : '%s://%s%s' % ( scheme, location, path),
-                 'user': _parse_user(image.location),
+                 'user':  user if user else request.user.username ,
                  'password' : '',
                  })
     if handled:

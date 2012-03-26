@@ -31,8 +31,8 @@ popd
 pushd $colony_horizon_dir/openstack-dashboard
 
 python setup.py install --record=$cwd/softwares/horizon/data/install-files2.txt
-cp -a debian/openstack-dashboard/var/lib/dash /usr/local/share
-ln -s /usr/local/share/dash/local /usr/local/share/dash/dashboard/local
+cp -a debian/openstack-dashboard/var/lib/dash /etc/horizon
+ln -s /etc/horizon/local /etc/horizon/dashboard/local
 
 popd
 

@@ -22,6 +22,7 @@
 Views for managing Swift containers.
 """
 import logging
+import os
 import socket
 
 try:
@@ -104,6 +105,14 @@ class UploadObject(forms.SelfHandlingForm):
             messages.success(request, "Object was successfully uploaded.")
         except Exception as e:
             messages.error(request, "Upload Object was failed (%s)" % str(e))
+        finally:
+            try:
+                if getattr(file, 'temporary_file_path', None):
+                    name = file.temporary_file_path()
+                    file.close()
+                    os.remove(name)
+            except Exception, e:
+                LOG.exception('file delete failed %s' % str(e))
 
         return None
 

@@ -92,6 +92,16 @@ class LoginWithTenant(Login):
                        widget=forms.TextInput(attrs={'readonly': 'readonly'}))
     tenant = forms.CharField(widget=forms.HiddenInput())
 
+    def handle(self, request, data):
+        tenant = data['tenant']
+        region = request.session.get('region', None)
+        token = util.auth(request, data, region)
+        if not token:
+            return None
+        if not tenant:
+            return shortcuts.redirect('dash_startup')
+        return shortcuts.redirect('dash_containers', tenant)
+
 class LoginWithRegion(Login):
     username = forms.CharField(max_length="255",
                        widget=forms.TextInput(attrs={'readonly': 'readonly'}))
@@ -161,6 +171,20 @@ def switch_tenants(request, tenant_id):
     form, handled = LoginWithTenant.maybe_handle(
             request, initial={'tenant': tenant_id,
                               'username': request.user.username})
+    token = api.token_for_region(request)
+    LOG.debug('token %s' % token)
+    if token:
+        data = { 'username' : request.user.username,
+                 'tenant_id' : tenant_id }
+        retval =  util.auth_with_token(request, data, token, 
+                                tenant_id, request.session.get('region', None), True)
+        LOG.debug("retval %s" % retval)
+        if retval:
+            util.set_default_for_region(request)
+            api.check_services_for_region(request)
+            request.session['tenant_id'] = tenant_id
+            return shortcuts.redirect('dash_containers', tenant_id)
+
     if handled:
         return handled
 

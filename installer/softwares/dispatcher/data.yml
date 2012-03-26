@@ -61,6 +61,8 @@ config_item_defaults:
 component_config_defaults:
   - path: /etc/dispatcher.conf
     component: colony_dispatcher
+  - path: /etc/dispatcher-init.conf
+    component: colony_dispatcher
 
 software_config_defaults:
 

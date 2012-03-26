@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-basedir="/usr/local/share/dash"
+basedir="/etc/horizon"
 databasedir="/var/lib/horizon"
 
 pushd $basedir/dashboard

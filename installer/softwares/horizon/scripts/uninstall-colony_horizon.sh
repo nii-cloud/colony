@@ -33,7 +33,7 @@ done
 
 remove_templates "horizon" "colony_horizon"
 
-rm -rf /usr/local/share/dash
+rm -rf /etc/horizon
 rm -rf /usr/local/share/horizon
 
 
