@@ -24,6 +24,7 @@ import sys
 import time
 from cStringIO import StringIO
 from uuid import uuid4
+from xml.dom.minidom import getDOMImplementation, parseString
 
 class RelayRequest(object):
     """ """
@@ -827,6 +828,22 @@ class Dispatcher(object):
                     e['name'] = prefix + self.combinater_char + e['name']
                     merge_body.append(e)
             return json.dumps(merge_body)
+        elif content_type.startswith('application/xml'):
+            impl = getDOMImplementation()
+            merge_body = impl.createDocument(None, None, None)
+            acct = merge_body.createElement("account")
+            merge_body.appendChild(acct)
+            for prefix, body in zip(prefixes, bodies):
+                dom = parseString(body)
+                p_emt = dom.getElementsByTagName('account')[0]
+                acct_name = p_emt.getAttribute('name')
+                acct.setAttribute('name', acct_name)
+                for emt in p_emt.getElementsByTagName('container'):
+                    orig_name = emt.getElementsByTagName('name').item(0).childNodes[0].data
+                    new_name = '%s:%s' % (prefix, orig_name)
+                    emt.getElementsByTagName('name').item(0).childNodes[0].data = new_name
+                    acct.appendChild(emt)
+            return merge_body.toxml('UTF-8')
         else:
             pass
 
