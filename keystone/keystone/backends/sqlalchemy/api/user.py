@@ -51,6 +51,11 @@ class UserAPI(BaseUserAPI):
             session = get_session()
         return session.query(models.User).filter_by(email=email).first()
 
+    def get_by_eppn(self, eppn, session=None):
+        if not session:
+            session = get_session()
+        return session.query(models.User).filter_by(eppn=eppn).first()
+
     def get_page(self, marker, limit, session=None):
         if not session:
             session = get_session()
@@ -232,27 +237,22 @@ class UserAPI(BaseUserAPI):
         # Also the user lookup is nasty and potentially injectiable.
         if not session:
             session = get_session()
-        user = aliased(models.UserRoleAssociation)
+        user = aliased(models.User)
+
         if marker:
-            rv = session.query(user).\
-                         filter("tenant_id = :tenant_id").\
-                         params(tenant_id='%s' % tenant_id).\
-                         filter("id>=:marker").\
-                         params(marker='%s' % marker).\
-                         order_by("id").\
+            users = session.query(user).\
+                         filter_by(tenant_id = tenant_id).\
+                         filter("id > :marker").params(\
+                         marker='%s' % marker).order_by(user.id).\
                          limit(limit).\
                          all()
         else:
-            rv = session.query(user).\
-                         filter("tenant_id = :tenant_id").\
-                         params(tenant_id='%s' % tenant_id).\
-                         order_by("id").\
+            users = session.query(user).\
+                         filter_by(tenant_id = tenant_id).\
+                         order_by(user.id).\
                          limit(limit).\
                          all()
-        user_ids = set([str(assoc.user_id) for assoc in rv])
-        users = session.query(models.User).\
-                      filter("id in ('%s')" % "','".join(user_ids)).\
-                      all()
+
         for usr in users:
             usr.tenant_roles = set()
             for role in usr.roles:

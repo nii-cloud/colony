@@ -1,16 +1,40 @@
+{% if swift_enable_other_account %}
+<div>
+{% include "django_openstack/dash/containers/_storage_form.html" with form=storage_url_form %}
+</div>
+<br />
+<br />
+<br />
+{% endif %}
 <table id="containers" class="wide">
   <tr>
-    <th>Name</th>
-    <th>Actions</th>
+    <th id="name">Name</th>
+    <th id="status">Status</th>
+    <th id="actions">Actions</th>
   </tr>
   {% for container in containers %}
   <tr class="{% cycle 'odd' 'even' %}">
-    <td>{{ container.name }}</td>
-    <td id="actions">
+    <td id="container" width="70%">{{ container.unquote_name }}</td>
+    <td id="status" width="20%">
       <ul>
-        <li class="form">{% include "django_openstack/dash/containers/_delete.html" with form=delete_form %}</li>
-        <li><a href="{% url dash_objects request.user.tenant_id container.name %}">List Objects</a></li>
-        <li><a href="{% url dash_objects_upload request.user.tenant_id container.name %}">Upload Object</a></li>
+        <li>Count: {{ container.object_count }} </li>
+        <li>Size: {{ container.size_used|filesizeformat }} </li>
+        {% for header in container.headers %}
+        <li>Data: {{ header }} </li>
+        {% endfor %}
+      </ul>
+    </td>
+    <td id="actions" width="10%">
+      <ul>
+        {% if not storage_url %}
+        <li class="form" style="margin: 0" >{% include "django_openstack/dash/containers/_delete.html" with form=delete_form %}</li>
+        {% endif %}
+        <li style="margin: 0"><a href="{% url dash_objects request.user.tenant_id container.name|urlencode:"" %}">List Objects</a></li>
+        <li style="margin: 0"><a href="{% url dash_objects_upload request.user.tenant_id container.name|urlencode:"" %}">Upload Object</a></li>
+        {% if not storage_url %}
+        <li style="margin: 0"><a href="{% url dash_containers_public request.user.tenant_id container.name|urlencode:"" %}">PUBLIC</a></li>
+        <li style="margin: 0"><a href="{% url dash_containers_acl request.user.tenant_id container.name|urlencode:"" %}">ACL</a></li>
+        <li style="margin: 0"><a href="{% url dash_containers_meta request.user.tenant_id container.name|urlencode:"" %}">MetaData</a></li        {% endif %}
       </ul>
     </td>
   </tr>

@@ -112,6 +112,25 @@ class IdentityService(object):
 
         return self._authenticate(validate, creds.user_id, creds.tenant_id)
 
+    def authenticate_s3(self, credentials):
+        # Check credentials
+        if not isinstance(credentials, auth.S3Credentials):
+            raise fault.BadRequestFault("Expecting S3 Credentials!")
+
+        creds = api.CREDENTIALS.get_by_access(credentials.access)
+        if not creds:
+            raise fault.UnauthorizedFault("No credentials found for %s"
+                                          % credentials.access)
+
+        def validate(duser):
+            signer = Signer(creds.secret)
+            signature = signer.generate(credentials, s3=True)
+            if signature == credentials.signature:
+                return True
+            return False
+
+        return self._authenticate(validate, creds.user_id, creds.tenant_id)
+
     def _authenticate(self, validate, user_id, tenant_id=None):
         if tenant_id:
             duser = api.USER.get_by_tenant(user_id, tenant_id)
@@ -303,14 +322,27 @@ class IdentityService(object):
             raise fault.UserConflictFault(
                 "A user with that name already exists")
 
-        if api.USER.get_by_email(user.email):
-            raise fault.EmailConflictFault(
-                "A user with that email already exists")
+        if user.email is not None:
+            if len(user.email) == 0:
+                raise fault.BadRequestFault("Expecting a email")
+            
+            if api.USER.get_by_email(user.email):
+                raise fault.EmailConflictFault(
+                    "A user with that email already exists")
+
+        if user.eppn is not None:
+            if len(user.eppn) == 0:
+                raise fault.BadRequestFault("Expecting a eppn")
+
+            if api.USER.get_by_eppn(user.eppn):
+                raise fault.EppnConflictFault(
+                    "A user with that eppn already exists")
 
         duser = models.User()
         duser.name = user.name
         duser.password = user.password
         duser.email = user.email
+        duser.eppn= user.eppn
         duser.enabled = user.enabled
         duser.tenant_id = user.tenant_id
         duser = api.USER.create(duser)
@@ -328,7 +360,7 @@ class IdentityService(object):
             return dtenant
 
     def get_tenant_users(self, admin_token, tenant_id, marker, limit, url):
-        self.__validate_admin_token(admin_token)
+        self.__validate_token(admin_token, False)
 
         if tenant_id == None:
             raise fault.BadRequestFault("Expecting a Tenant Id")
@@ -340,9 +372,11 @@ class IdentityService(object):
         ts = []
         dtenantusers = api.USER.users_get_by_tenant_get_page(tenant_id, marker,
                                                           limit)
+
+
         for dtenantuser in dtenantusers:
             ts.append(User(None, dtenantuser.id, dtenantuser.name, tenant_id,
-                           dtenantuser.email, dtenantuser.enabled,
+                           dtenantuser.email, dtenantuser.eppn, dtenantuser.enabled,
                            dtenantuser.tenant_roles if hasattr(dtenantuser,
                                                     "tenant_roles") else None))
         links = []
@@ -363,7 +397,7 @@ class IdentityService(object):
         dusers = api.USER.users_get_page(marker, limit)
         for duser in dusers:
             ts.append(User(None, duser.id, duser.name, duser.tenant_id,
-                                   duser.email, duser.enabled))
+                                   duser.email, duser.eppn, duser.enabled))
         links = []
         if ts.__len__():
             prev, next = api.USER.users_get_page_markers(marker, limit)
@@ -381,7 +415,7 @@ class IdentityService(object):
         if not duser:
             raise fault.ItemNotFoundFault("The user could not be found")
         return User_Update(id=duser.id, tenant_id=duser.tenant_id,
-                email=duser.email, enabled=duser.enabled, name=duser.name)
+                email=duser.email, eppn=duser.eppn, enabled=duser.enabled, name=duser.name)
 
     def update_user(self, admin_token, user_id, user):
         self.__validate_admin_token(admin_token)
@@ -394,6 +428,9 @@ class IdentityService(object):
         if not isinstance(user, User):
             raise fault.BadRequestFault("Expecting a User")
 
+        if not user.email:
+            raise fault.BadRequestFault("Expecting a Email")
+
         if user.email != duser.email and \
                 api.USER.get_by_email(user.email) is not None:
             raise fault.EmailConflictFault("Email already exists")
@@ -402,7 +439,29 @@ class IdentityService(object):
         api.USER.update(user_id, values)
         duser = api.USER.user_get_update(user_id)
         return User(duser.password, duser.id, duser.name, duser.tenant_id,
-            duser.email, duser.enabled)
+            duser.email, duser.eppn, duser.enabled)
+
+    def set_user_eppn(self, admin_token, user_id, user):
+        self.__validate_token(admin_token)
+
+        duser = api.USER.get(user_id)
+        if not duser:
+            raise fault.ItemNotFoundFault("The user could not be found")
+
+        if not isinstance(user, User):
+            raise fault.BadRequestFault("Expecting a User")
+
+        if not user.eppn:
+            raise fault.BadRequestFault("Expecting a Eppn")
+
+        if user.eppn != duser.eppn and \
+                api.USER.get_by_eppn(user.eppn) is not None:
+            raise fault.EppnConflictFault("Eppn already exists")
+
+        values = {'eppn': user.eppn}
+        api.USER.update(user_id, values)
+
+        return User_Update(eppn=user.eppn)
 
     def set_user_password(self, admin_token, user_id, user):
         self.__validate_admin_token(admin_token)
@@ -414,9 +473,8 @@ class IdentityService(object):
         if not isinstance(user, User):
             raise fault.BadRequestFault("Expecting a User")
 
-        duser = api.USER.get(user_id)
-        if duser == None:
-            raise fault.ItemNotFoundFault("The user could not be found")
+        if not user.password:
+            raise fault.BadRequestFault("Expecting a Password")
 
         values = {'password': user.password}
 
@@ -451,6 +509,9 @@ class IdentityService(object):
         duser = api.USER.get(user_id)
         if duser == None:
             raise fault.ItemNotFoundFault("The user could not be found")
+
+        if not user.tenant_id:
+            raise fault.BadRequestFault("Expecting a TenantID")
 
         self.validate_and_fetch_user_tenant(user.tenant_id)
         values = {'tenant_id': user.tenant_id}
@@ -1049,3 +1110,31 @@ class IdentityService(object):
                         api.ROLE.ref_delete(role_ref.id)
                 api.ROLE.delete(role.id)
         api.SERVICE.delete(service_id)
+
+    '''
+    get token by email
+    add by colony. 
+    '''
+    def get_token_by_email(self, admin_token, email):
+        self.__validate_token(admin_token, False)
+        dmail = api.USER.get_by_email(email)
+
+        def validate(duser):
+            # The user is already authenticated by gakunin
+            return True
+
+        if dmail:
+            return self._authenticate(validate, dmail.id)
+        raise fault.ItemNotFoundFault("email not found")
+
+    def get_token_by_eppn(self, admin_token, eppn):
+        self.__validate_token(admin_token, False)
+        deppn = api.USER.get_by_eppn(eppn)
+
+        def validate(duser):
+            # The user is already authenticated by gakunin
+            return True
+
+        if deppn:
+            return self._authenticate(validate, deppn.id)
+        raise fault.ItemNotFoundFault("eppn not found")

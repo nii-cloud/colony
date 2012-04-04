@@ -1,0 +1,48 @@
+description: colony apache
+
+components:
+  - name: colony_apache
+  - name: colony_mod_wsgi
+  - name: colony_mod_shib2
+
+config_item_defaults:
+  - name: servername 
+    value: "example.com:80"
+  - name: application_defaults_entityid
+    value: "https://localhost/shibboleth"
+  - name: sso_entityid
+    value: "https://localhost/shibboleth"
+  - name: samlds_url
+    value: "https://localhost/WAYF"
+  - name: metadata_provider_uri
+    value: "http://localhost/metadata.xml"
+  - name: max_validity_interval
+    value: "1296000"
+  - name: signature_certificate
+    value: "/etc/shibboleth/cert/signer.pem"
+  - name: credential_resolver_key
+    value: "cert/sp-key.pem"
+  - name: credential_resolver_certificate
+    value: "cert/sp-cert.pem"
+    name: horizon_base_dir
+    value: "/etc/horizon"
+
+
+component_config_defaults:
+  - path: /etc/apache2/conf.d/productname.conf
+    component: colony_apache
+  - path: /etc/apache2/conf.d/wsgi.conf
+    component: colony_mod_wsgi
+  - path: /etc/apache2/conf.d/shib2.conf
+    component: colony_mod_shib2
+  - path: /etc/apache2/sites-available/default-shib
+    component: colony_mod_shib2
+  - path: /etc/shibboleth/shibboleth2.xml
+    component: colony_mod_shib2
+
+software_config_defaults:
+
+test_components:
+  - component: colony_apache
+
+

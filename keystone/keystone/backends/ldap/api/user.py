@@ -19,7 +19,9 @@ class UserAPI(BaseLdapAPI, BaseUserAPI):
     attribute_mapping = {
         'password': 'userPassword',
         'email': 'mail',
+        'eppn': 'eppn',
         'enabled': 'keystoneEnabled',
+        'name': 'keystoneName'
     }
     attribute_ignore = ['tenant_id']
 
@@ -31,12 +33,26 @@ class UserAPI(BaseLdapAPI, BaseUserAPI):
         return obj
 
     def get_by_name(self, name, filter=None):
-        return self.get(name, filter)
+         users = self.get_all('(keystoneName=%s)' % \
+                             (ldap.filter.escape_filter_chars(name),))
+         try:
+             return users[0]
+         except IndexError:
+             return None
 
     def create(self, values):
-        # Persist the 'name' as the UID
-        values['id'] = values['name']
-        delattr(values, 'name')
+        id_list = [0]
+
+        conn = self.api.get_connection()
+        query = '(objectClass=keystoneUser)'
+        list = conn.search_s(self.tree_dn, ldap.SCOPE_ONELEVEL, query)
+        for dn, attrs in list:
+            id_list.append(int(self.api.user._dn_to_id(dn)))
+        
+        id_list.sort()
+        id_max = id_list[-1]
+        values['id'] = str(id_max + 1)
+
         utils.set_hashed_password(values)
         values = super(UserAPI, self).create(values)
         if values['tenant_id'] is not None:
@@ -68,6 +84,14 @@ class UserAPI(BaseLdapAPI, BaseUserAPI):
     def get_by_email(self, email):
         users = self.get_all('(mail=%s)' % \
                             (ldap.filter.escape_filter_chars(email),))
+        try:
+            return users[0]
+        except IndexError:
+            return None
+
+    def get_by_eppn(self, eppn):
+        users = self.get_all('(eppn=%s)' % \
+                            (ldap.filter.escape_filter_chars(eppn),))
         try:
             return users[0]
         except IndexError:

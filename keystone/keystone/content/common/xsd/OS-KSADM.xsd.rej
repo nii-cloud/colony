@@ -1,0 +1,14 @@
+--- keystone/content/common/xsd/OS-KSADM.xsd	2012-02-06 16:44:01.785133459 +0900
++++ keystone/content/common/xsd/OS-KSADM.xsd	2011-12-26 17:24:55.000000000 +0900
+@@ -99,9 +99,10 @@
+             <restriction base="identity:User">
+                 <attribute name="id" type="xsd:ID" use="prohibited"/>
+                 <attribute name="email" type="xsd:string" use="prohibited"/>
++                <attribute name="eppn" type="xsd:string" use="prohibited"/>
+                 <attribute name="username" type="xsd:ID" use="prohibited"/>
+                 <attribute name="enabled" type="xsd:boolean" use="required"/>
+             </restriction>
+         </complexContent>
+     </complexType>
+-</schema>
++</schema>

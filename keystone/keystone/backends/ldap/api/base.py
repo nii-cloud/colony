@@ -1,6 +1,7 @@
 import ast
 import ldap
 from itertools import izip, count
+from keystone.utils import task_switch
 
 
 def _get_redirect(cls, method):
@@ -58,7 +59,10 @@ class BaseLdapAPI(object):
             except KeyError:
                 pass
             else:
-                obj[k] = v[0]
+                try:
+                    obj[k] = v[0]
+                except IndexError:
+                    obj[k] = None
         return obj
 
     def create(self, values):
@@ -74,7 +78,7 @@ class BaseLdapAPI(object):
         if 'groupOfNames' in object_classes and self.use_dumb_member:
             attrs.append(('member', [self.DUMB_MEMBER_DN]))
         conn.add_s(self._id_to_dn(values['id']), attrs)
-        return self.model(values)
+        return self.model(**values)
 
     def _ldap_get(self, id, filter=None):
         conn = self.api.get_connection()
@@ -83,6 +87,8 @@ class BaseLdapAPI(object):
             query = '(&%s%s)' % (filter, query)
         try:
             res = conn.search_s(self._id_to_dn(id), ldap.SCOPE_BASE, query)
+            task_switch()
+            return res
         except ldap.NO_SUCH_OBJECT:
             return None
         try:
@@ -96,7 +102,9 @@ class BaseLdapAPI(object):
         if filter is not None:
             query = '(&%s%s)' % (filter, query)
         try:
-            return conn.search_s(self.tree_dn, ldap.SCOPE_ONELEVEL, query)
+            ret = conn.search_s(self.tree_dn, ldap.SCOPE_ONELEVEL, query)
+            task_switch()
+            return ret
         except ldap.NO_SUCH_OBJECT:
             return []
 
@@ -121,31 +129,41 @@ class BaseLdapAPI(object):
         if not marker:
             return lst[:limit]
         else:
-            return filter(lambda e: key(e) > marker, lst)[:limit]
+            m = int(marker)
+            return filter(lambda e: int(key(e)) > m, lst)[:limit]
 
     def _get_page_markers(self, marker, limit, lst, key=lambda e: e.id):
-        if len(lst) < limit:
+        length = len(lst)
+
+        if length < limit or limit == 0:
             return (None, None)
         lst.sort(key=key)
-        if marker is None:
-            if len(lst) <= limit + 1:
+        if marker is None or marker == '0':
+            if length <= limit:
                 nxt = None
             else:
-                nxt = key(lst[limit])
+                nxt = key(lst[limit - 1])
             return (None, nxt)
+
+        if length <= int(marker):
+            return (None, None)
+
         for i, item in izip(count(), lst):
-            k = key(item)
-            if k >= marker:
+            k = int(key(item))
+            if k > int(marker):
                 exact = k == marker
                 break
-        if i <= limit:
+
+        if i < limit:
             prv = None
         else:
-            prv = key(lst[i - limit])
-        if i + limit >= len(lst) - 1:
+            prv = str(int(key(lst[i - limit])) - 1)
+
+        if i + limit >= length:
             nxt = None
         else:
-            nxt = key(lst[i + limit])
+            nxt = key(lst[i + limit - 1])
+
         return (prv, nxt)
 
     def update(self, id, values, old_obj=None):

@@ -33,8 +33,8 @@ from django_openstack import urls as django_openstack_urls
 
 urlpatterns = patterns('',
     url(r'^$', 'dashboard.views.splash', name='splash'),
-    url(r'^dash/$', 'django_openstack.dash.views.instances.usage',
-        name='dash_overview'),
+    url(r'^dash/$', 'django_openstack.dash.views.start.index',
+        name='dash_startup'),
     url(r'^syspanel/$', 'django_openstack.syspanel.views.instances.usage',
         name='syspanel_overview'),
 )

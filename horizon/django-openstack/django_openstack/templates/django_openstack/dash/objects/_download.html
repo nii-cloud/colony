@@ -1,0 +1,10 @@
+<form id="form_download_{{ object.name }}" class="form-download" action="." method="post">
+  {% csrf_token %}
+  {% for hidden in form.hidden_fields %}
+    {{hidden}}
+  {% endfor %}
+  <input name="container_name" type="hidden" value="{{ container_name }}" />
+  <input name="object_name" type="hidden" value="{{ object.name }}" />
+  <input name="content_type" type="hidden" value="{{ object.content_type }}" />
+  <input id="download_{{ object.name }}" class="download" title="Object: {{ object.name }}" type="submit" value="Download" />
+</form>

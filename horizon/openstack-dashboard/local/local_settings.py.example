@@ -9,12 +9,13 @@ LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(LOCAL_PATH, 'dashboard_openstack.sqlite3'),
+        'NAME': ':memory:'
     },
 }
 
 CACHE_BACKEND = 'dummy://'
 
+OPENSTACK_COMPUTE_ENABLED = True
 
 # Send email to the console by default
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
@@ -39,7 +40,9 @@ OPENSTACK_KEYSTONE_DEFAULT_ROLE = "Member"
 
 # NOTE(tres): Available services should come from the service
 #             catalog in Keystone.
-SWIFT_ENABLED = False
+SWIFT_ENABLED = True
+
+IMAGE_METADATA_GLANCE_ENABLED = True
 
 # Configure quantum connection details for networking
 QUANTUM_ENABLED = True
@@ -47,6 +50,12 @@ QUANTUM_URL = '127.0.0.1'
 QUANTUM_PORT = '9696'
 QUANTUM_TENANT = '1234'
 QUANTUM_CLIENT_VERSION='0.1'
+
+# 
+GAKUNIN_ENABLED = True
+GAKUNIN_LOGIN_URL = '/auth/gakunin'
+
+KEYSTONE_ADMIN_TOKEN = ""
 
 # If you have external monitoring links
 EXTERNAL_MONITORING = [

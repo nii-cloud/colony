@@ -26,6 +26,7 @@ from keystone.controllers.tenant import TenantController
 from keystone.controllers.user import UserController
 from keystone.controllers.version import VersionController
 from keystone.controllers.extensions import ExtensionsController
+from keystone.controllers.token_by import TokenByController
 import keystone.contrib.extensions.admin as extension
 
 
@@ -95,6 +96,10 @@ class AdminApi(wsgi.Router):
                     controller=user_controller,
                     action="delete_user",
                     conditions=dict(method=["DELETE"]))
+        mapper.connect("/users/{user_id}/eppn",
+                    controller=user_controller,
+                    action="set_user_eppn",
+                    conditions=dict(method=["PUT"]))
         mapper.connect("/users/{user_id}/password",
                     controller=user_controller,
                     action="set_user_password",
@@ -112,6 +117,21 @@ class AdminApi(wsgi.Router):
                     controller=user_controller,
                     action="get_tenant_users",
                     conditions=dict(method=["GET"]))
+
+        """
+        get token by email
+        add by colony.
+        """
+        # Get token by key Operations
+        token_by_controller = TokenByController(options)
+        mapper.connect("/token_by/email",
+                    controller=token_by_controller,
+                    action="get_token_by",
+                    conditions=dict(method=["POST"]))
+        mapper.connect("/token_by/eppn",
+                    controller=token_by_controller,
+                    action="get_token_by",
+                    conditions=dict(method=["POST"]))
 
         #EndpointTemplatesControllers and Endpoints
         endpoint_templates_controller = EndpointTemplatesController(options)

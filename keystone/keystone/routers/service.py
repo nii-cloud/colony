@@ -21,9 +21,11 @@ from keystone.common import wsgi
 import keystone.backends as db
 from keystone.controllers.auth import AuthController
 from keystone.controllers.tenant import TenantController
+from keystone.controllers.user import UserController
 from keystone.controllers.version import VersionController
 from keystone.controllers.staticfiles import StaticFilesController
 from keystone.controllers.extensions import ExtensionsController
+from keystone.controllers.token_by import TokenByController
 
 
 class ServiceApi(wsgi.Router):
@@ -43,11 +45,39 @@ class ServiceApi(wsgi.Router):
         mapper.connect("/ec2tokens", controller=auth_controller,
                        action="authenticate_ec2",
                        conditions=dict(method=["POST"]))
+        mapper.connect("/s3tokens", controller=auth_controller,
+                       action="authenticate_s3",
+                       conditions=dict(method=["POST"]))
         tenant_controller = TenantController(options, True)
         mapper.connect("/tenants",
                         controller=tenant_controller,
                         action="get_tenants",
                         conditions=dict(method=["GET"]))
+        user_controller = UserController(options)
+        mapper.connect("/tenants/{tenant_id}/users",
+                    controller=user_controller,
+                    action="get_tenant_users",
+                    conditions=dict(method=["GET"]))
+
+        mapper.connect("/users/{user_id}/eppn",
+                    controller=user_controller,
+                    action="set_user_eppn",
+                    conditions=dict(method=["PUT"]))
+
+        """
+        get token by email
+        add by colony.
+        """
+        # Get token by key Operations
+        token_by_controller = TokenByController(options)
+        mapper.connect("/token_by/email",
+                    controller=token_by_controller,
+                    action="get_token_by",
+                    conditions=dict(method=["POST"]))
+        mapper.connect("/token_by/eppn",
+                    controller=token_by_controller,
+                    action="get_token_by",
+                    conditions=dict(method=["POST"]))
 
         # Miscellaneous Operations
         version_controller = VersionController(options)

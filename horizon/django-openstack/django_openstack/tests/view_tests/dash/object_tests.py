@@ -22,9 +22,10 @@ import tempfile
 
 from django import http
 from django.core.urlresolvers import reverse
+from django.contrib import messages
 from django_openstack import api
 from django_openstack.tests.view_tests import base
-from mox import IsA
+from mox import IsA,IgnoreArg
 
 
 class ObjectViewTests(base.BaseViewTests):
@@ -73,8 +74,8 @@ class ObjectViewTests(base.BaseViewTests):
                     'name': OBJECT_NAME,
                     'object_file': OBJECT_FILE}
 
-        self.mox.StubOutWithMock(api, 'swift_upload_object')
-        api.swift_upload_object(IsA(http.HttpRequest),
+        self.mox.StubOutWithMock(api, 'swift_upload_object_with_manifest')
+        api.swift_upload_object_with_manifest(IsA(http.HttpRequest),
                                 unicode(self.CONTAINER_NAME),
                                 unicode(OBJECT_NAME),
                                 OBJECT_DATA)
@@ -197,6 +198,124 @@ class ObjectViewTests(base.BaseViewTests):
                                                   args=[self.TEST_TENANT,
                                                         ORIG_CONTAINER_NAME,
                                                         ORIG_OBJECT_NAME]))
+
+        self.mox.VerifyAll()
+
+    def test_meta_get(self):
+        OBJECT_NAME = 'objectName'
+        headers = {'x-object-meta-hoge': 'fuga'}
+        self.mox.StubOutWithMock(api, 'swift_get_object_info')
+        api.swift_get_object_info(IsA(http.HttpRequest),
+                                  unicode(self.CONTAINER_NAME),
+                                  OBJECT_NAME).AndReturn(headers)
+        self.mox.ReplayAll()
+
+        res = self.client.get(reverse('dash_objects_meta',
+                                      args=[self.TEST_TENANT,
+                                            self.CONTAINER_NAME,
+                                            OBJECT_NAME]))
+
+        self.mox.VerifyAll()
+                                  
+
+    def test_meta_put(self):
+        OBJECT_NAME = 'objectName'
+        formData = {'method' : 'ObjectMeta',
+                    'container_name' : self.CONTAINER_NAME,
+                    'object_name' : OBJECT_NAME,
+                    'header_name' : 'x-object-meta-hoge',
+                    'header_value' : 'object-meta-value'
+                   }
+        self.mox.StubOutWithMock(api, 'swift_set_object_info')
+        api.swift_set_object_info(IsA(http.HttpRequest),
+                                  unicode(self.CONTAINER_NAME),
+                                  OBJECT_NAME,
+                                  { 'hoge' : 'object-meta-value' }
+                                 )
+        self.mox.ReplayAll()
+
+        res = self.client.post(reverse('dash_objects_meta',
+                                      args=[self.TEST_TENANT,
+                                            self.CONTAINER_NAME,
+                                            OBJECT_NAME]), formData)
+        self.assertRedirectsNoFollow(res, reverse('dash_objects_meta',
+                                                  args=[self.TEST_TENANT,
+                                                        self.CONTAINER_NAME,
+                                                        OBJECT_NAME]))
+
+        self.mox.VerifyAll()
+
+    def test_meta_put_invalid(self):
+        OBJECT_NAME = 'objectName'
+        formData = {'method' : 'ObjectMeta',
+                    'container_name' : self.CONTAINER_NAME,
+                    'object_name' : OBJECT_NAME,
+                    'header_name' : 'x-invalid-meta-hoge',
+                    'header_value' : 'object-meta-value'
+                   }
+        self.mox.StubOutWithMock(messages, 'error')
+        messages.error(IsA(http.HttpRequest), IgnoreArg())
+
+        self.mox.ReplayAll()
+
+        res = self.client.post(reverse('dash_objects_meta',
+                                      args=[self.TEST_TENANT,
+                                            self.CONTAINER_NAME,
+                                            OBJECT_NAME]), formData)
+        self.assertRedirectsNoFollow(res, reverse('dash_objects_meta',
+                                                  args=[self.TEST_TENANT,
+                                                        self.CONTAINER_NAME,
+                                                        OBJECT_NAME]))
+
+        self.mox.VerifyAll()
+
+    def test_meta_remove_invalid(self):
+
+        OBJECT_NAME = 'objectName'
+        formData = {'method' : 'ObjectMetaRemove',
+                    'container_name' : self.CONTAINER_NAME,
+                    'object_name' : OBJECT_NAME,
+                    'header_name' : 'x-invalid-meta-hoge'
+                   }
+        self.mox.StubOutWithMock(messages, 'error')
+        messages.error(IsA(http.HttpRequest), IgnoreArg())
+        self.mox.ReplayAll()
+
+        res = self.client.post(reverse('dash_objects_meta',
+                                      args=[self.TEST_TENANT,
+                                            self.CONTAINER_NAME,
+                                            OBJECT_NAME]), formData)
+        self.assertRedirectsNoFollow(res, reverse('dash_objects_meta',
+                                                  args=[self.TEST_TENANT,
+                                                        self.CONTAINER_NAME,
+                                                        OBJECT_NAME]))
+
+        self.mox.VerifyAll()
+
+    def test_meta_remove(self):
+
+        OBJECT_NAME = 'objectName'
+        formData = {'method' : 'ObjectMetaRemove',
+                    'container_name' : self.CONTAINER_NAME,
+                    'object_name' : OBJECT_NAME,
+                    'header_name' : 'x-object-meta-hoge'
+                   }
+        self.mox.StubOutWithMock(api, 'swift_remove_object_info')
+        api.swift_remove_object_info(IsA(http.HttpRequest),
+                                  unicode(self.CONTAINER_NAME),
+                                  OBJECT_NAME,
+                                  { 'hoge' : '' }
+                                 )
+        self.mox.ReplayAll()
+
+        res = self.client.post(reverse('dash_objects_meta',
+                                      args=[self.TEST_TENANT,
+                                            self.CONTAINER_NAME,
+                                            OBJECT_NAME]), formData)
+        self.assertRedirectsNoFollow(res, reverse('dash_objects_meta',
+                                                  args=[self.TEST_TENANT,
+                                                        self.CONTAINER_NAME,
+                                                        OBJECT_NAME]))
 
         self.mox.VerifyAll()
 

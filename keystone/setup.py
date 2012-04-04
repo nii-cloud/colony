@@ -68,6 +68,8 @@ setup(
             'remoteauth=keystone.middleware.remoteauth:remoteauth_factory',
             'tokenauth=keystone.middleware.auth_token:filter_factory',
             'swiftauth=keystone.middleware.swift_auth:filter_factory',
+            'tokenauth_colony=keystone.middleware.auth_token_for_colony:filter_factory',
+            's3token=keystone.middleware.s3_token:filter_factory',
             ],
         },
     )

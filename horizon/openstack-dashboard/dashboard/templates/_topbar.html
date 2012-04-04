@@ -1,11 +1,11 @@
 <div id='header'>
   <ul id="main_nav">
-    <li id="home_link"><h1><a href='{% url splash %}'>OpenStack Dashboard</a></h1></li>
+    <li id="home_link"><h1><a href=''>OpenStack Dashboard</a></h1></li>
     {% if request.user %}
-      <li><a {% if current_topbar == "dash" %} class="active" {% endif %} href="{% url dash_overview %}">User Dashboard</a></li>
+      <li><a {% if current_topbar == "dash" %} class="active" {% endif %} href="{% url dash_containers request.user.tenant_id %}">User Dashboard</a></li>
 
       {% if request.user.is_admin %}
-      <li><a {% if current_topbar == "syspanel" %} class="active" {% endif %} href="{% url syspanel_overview %}">System Panel</a></li>
+      <li><a {% if current_topbar == "syspanel" %} class="active" {% endif %} href="{% url syspanel_tenant_users request.user.tenant_id %}">System Panel</a></li>
       {% endif %}
     {% else %}
       NOT _LOGGED_IN_TOPBAR
@@ -13,9 +13,9 @@
   </ul>
 
   <div id="user_bar">
-    <a id="current_tenant" href="{% url dash_overview %}">
+    <a id="current_tenant" href="{% url dash_containers request.user.tenant_id %}">
       <h4>{{request.user.tenant_name}}</h4>
-      <span>as {{request.user.username}}</span>
+      <span>as {{request.user.username}} ({{ request.session.region }})</span>
     </a>
     <a id="drop_btn" href="#">&nbsp;</a>
     <ul id="user_tenant_list">

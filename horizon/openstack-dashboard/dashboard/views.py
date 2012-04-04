@@ -32,10 +32,7 @@ from django_openstack.auth import views as auth_views
 @vary.vary_on_cookie
 def splash(request):
     if request.user:
-        if request.user.is_admin():
-            return shortcuts.redirect('syspanel_overview')
-        else:
-            return shortcuts.redirect('dash_overview')
+        return shortcuts.redirect('dash_startup')
 
     form, handled = auth_views.Login.maybe_handle(request)
     if handled:

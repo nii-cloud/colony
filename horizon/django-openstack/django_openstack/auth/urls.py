@@ -30,3 +30,7 @@ urlpatterns = patterns('django_openstack.auth.views',
     url(r'region/(?P<region_name>[^/]+)/$', 'switch_regions',
         name='auth_region_switch'),
 )
+
+urlpatterns += patterns('django_openstack.auth.gakunin',
+    url(r'gakunin/$', 'login', name='gakunin_login'),
+)

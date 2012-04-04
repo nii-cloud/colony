@@ -23,9 +23,11 @@ from django.conf.urls.defaults import *
 SECURITY_GROUPS = r'^(?P<tenant_id>[^/]+)/security_groups/(?P<security_group_id>[^/]+)/%s$'
 INSTANCES = r'^(?P<tenant_id>[^/]+)/instances/(?P<instance_id>[^/]+)/%s$'
 IMAGES = r'^(?P<tenant_id>[^/]+)/images/(?P<image_id>[^/]+)/%s$'
+IMAGES_METADATA = r'^(?P<tenant_id>[^/]+)/images_metadata/(?P<image_id>[^/]+)/%s$'
 KEYPAIRS = r'^(?P<tenant_id>[^/]+)/keypairs/%s$'
 SNAPSHOTS = r'^(?P<tenant_id>[^/]+)/snapshots/(?P<instance_id>[^/]+)/%s$'
 CONTAINERS = r'^(?P<tenant_id>[^/]+)/containers/%s$'
+USERS = r'^(?P<tenant_id>[^/]+)/containers/user/%s$'
 FLOATING_IPS = r'^(?P<tenant_id>[^/]+)/floating_ips/(?P<ip_id>[^/]+)/%s$'
 OBJECTS = r'^(?P<tenant_id>[^/]+)/containers/(?P<container_name>[^/]+)/%s$'
 NETWORKS = r'^(?P<tenant_id>[^/]+)/networks/%s$'
@@ -53,6 +55,12 @@ urlpatterns += patterns('django_openstack.dash.views.images',
     url(IMAGES % 'update', 'update', name='dash_images_update'),
 )
 
+urlpatterns += patterns('django_openstack.dash.views.images_metadata',
+    url(r'^(?P<tenant_id>[^/]+)/images_metadata/$', 'index', name='dash_images_metadata'),
+    url(IMAGES_METADATA % 'download', 'download', name='dash_metadata_download'),
+    url(IMAGES_METADATA % 'update', 'update', name='dash_metadata_update'),
+)
+
 urlpatterns += patterns('django_openstack.dash.views.keypairs',
     url(r'^(?P<tenant_id>[^/]+)/keypairs/$', 'index', name='dash_keypairs'),
     url(KEYPAIRS % 'create', 'create', name='dash_keypairs_create'),
@@ -73,7 +81,12 @@ urlpatterns += patterns('django_openstack.dash.views.snapshots',
 # Swift containers and objects.
 urlpatterns += patterns('django_openstack.dash.views.containers',
     url(CONTAINERS % '', 'index', name='dash_containers'),
+    url(CONTAINERS % 'index_storage_url', 'index_storage_url', name='dash_containers_storage_url'),
     url(CONTAINERS % 'create', 'create', name='dash_containers_create'),
+    url(OBJECTS % 'public', 'public', name='dash_containers_public'),
+    url(OBJECTS % 'acl', 'acl', name='dash_containers_acl'),
+    url(OBJECTS % 'meta', 'meta', name='dash_containers_meta'),
+    url(USERS % 'user_list', 'user_list', name='dash_users_list'),
 )
 
 urlpatterns += patterns('django_openstack.dash.views.objects',
@@ -81,8 +94,8 @@ urlpatterns += patterns('django_openstack.dash.views.objects',
     url(OBJECTS % 'upload', 'upload', name='dash_objects_upload'),
     url(OBJECTS % '(?P<object_name>[^/]+)/copy',
         'copy', name='dash_object_copy'),
-    url(OBJECTS % '(?P<object_name>[^/]+)/download',
-        'download', name='dash_objects_download'),
+    url(OBJECTS % '(?P<object_name>[^/]+)/meta',
+        'meta', name='dash_objects_meta'),
 )
 
 urlpatterns += patterns('django_openstack.dash.views.networks',

@@ -1,0 +1,62 @@
+description: colony horizon
+
+components:
+  - name: colony_horizon
+
+config_item_defaults:
+  - name: openstack_compute_enabled
+    value: False
+  - name: openstack_keystone_url
+    value: "http://localhost:5000/v2.0"
+  - name: openstack_keystone_admin_url
+    value: "http://localhost:5001/v2.0"
+  - name: openstack_keystone_default_role
+    value: 'Member'
+  - name: swift_enabled
+    value: True
+  - name: swift_large_object_size
+    value: "5242880000"
+  - name: swift_large_object_chunk_size
+    value: "1048576000"
+  - name: image_metadata_glance_enabled
+    value: True
+  - name: quantum_enabled
+    value: False
+  - name: quantum_url
+    value: "127.0.0.1"
+  - name: quantum_port
+    value: "9696"
+  - name: quantum_tenant
+    value: "1234"
+  - name: quantum_client_version
+    value: "0.1"
+  - name: gakunin_enabled
+    value: True
+  - name: gakunin_url
+    value: "/horizon/auth/gakunin"
+  - name: swift_access_other_account
+    value: False
+  - name: login_url
+    value: "/horizon/auth/login"
+  - name: login_redirect_url
+    value: "/horizon/auth/login"
+  - name: login_redirect_url
+    value: "/horizon/auth/login"
+  - name: media_url
+    value: "/horizon/media"
+  - name: static_url
+    value: "/horizon/static"
+  - name: admin_media_url
+    value: "/horizon/static/admin"
+
+
+component_config_defaults:
+  - path: /usr/local/share/dash/local/local_settings.py
+    component: colony_horizon
+  - path: /usr/local/share/dash/dashboard/settings.py
+    component: colony_horizon
+
+software_config_defaults:
+
+test_components:
+  - component: colony_horizon

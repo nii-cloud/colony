@@ -29,8 +29,14 @@ def tenants(request):
         return {}
 
     try:
-        return {'tenants': api.token_list_tenants(request, request.user.token)}
-    except api_exceptions.BadRequest, e:
+        try:
+            tenants = api.tenant_list_for_token_and_region(request, 
+                       api.token_for_region(request),
+                       request.session.get('region', None))
+        except api.ServiceCatalogException, e:
+            tenants = api.tenant_list_for_token(request, request.user.token)
+        return {'tenants': tenants }
+    except Exception, e:
         messages.error(request, "Unable to retrieve tenant list from\
                                   keystone: %s" % e.message)
         return {'tenants': []}
@@ -39,7 +45,7 @@ def regions(request):
     if not request.user or not request.user.is_authenticated():
         return {}
     try:
-        catalogs = request.user.service_catalog
+        catalogs = request.session['defaultServiceCatalog']
         results = []
         for catalog in catalogs:
             regions = [ api.Region(id=i+1, name=catalog['endpoints'][i]['region']) for i in range(len(catalog['endpoints'])) ]
@@ -55,10 +61,30 @@ def regions(request):
     except KeyError:
         return {'regions' : []}
 
+def compute(request):
+
+    result = request.session.get('OPENSTACK_COMPUTE_ENABLED', False)
+    return {'compute_configured' : result }
+
 def swift(request):
-    return {'swift_configured': settings.SWIFT_ENABLED}
 
-
+    result = request.session.get('SWIFT_ENABLED', False)
+    return {'swift_configured': result }
 
 def quantum(request):
     return {'quantum_configured': settings.QUANTUM_ENABLED}
+
+def image_metadata_glance(request):
+
+    result = request.session.get('IMAGE_METADATA_GLANCE_ENABLED', False)
+    return {'image_metadata_glance' : result}
+
+def gakunin(request):
+    return {'gakunin_configured' : settings.GAKUNIN_ENABLED }
+
+def gakunin_url(request):
+    return {'gakunin_login_url' : getattr(settings, 'GAKUNIN_LOGIN_URL', '/auth/gakunin') }
+
+def swift_enable_access_to_other_account(request):
+    return {'swift_enable_other_account' : getattr(settings, 'SWIFT_ACCESS_OTHER_ACCOUNT_ENABLED', False) }
+

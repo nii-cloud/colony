@@ -1,0 +1,27 @@
+#################################################################################
+# mod_python and mod_wsgi compatibility note
+#################################################################################
+# mod_wsgi will deadlock if run in daemon mode while mod_python is enabled
+# do not enable both mod_python and mod_wsgi if you are going to use the
+# WSGIDaemonProcess directive
+# In previous version of mod_wsgi, apache would segfault when both mod_wsgi
+# and mod_python were enabled.  This update does not guarantee that will not
+# happen.  
+#################################################################################
+# Do not enable mod_python and mod_wsgi in the same apache process.
+#################################################################################
+
+<IfModule mod_wsgi.c>
+WSGIScriptAlias /horizon <%= horizon_base_dir %>/dashboard/wsgi/django.wsgi
+WSGIDaemonProcess horizon python-path=<%= horizon_base_dir %>:<%= horizon_base_dir %>/dashboard 
+
+WSGIProcessGroup horizon
+
+Alias /horizon/static/ <%= horizon_base_dir %>/dashboard/static/
+Alias /horizon/media/ <%= horizon_base_dir %>/dashboard/media/
+
+<Directory /usr/local/share/dash/dashboard/wsgi>
+  Order allow,deny
+  Allow from all
+</Directory>
+</IfModule>

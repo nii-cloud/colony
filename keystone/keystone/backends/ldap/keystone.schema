@@ -33,6 +33,24 @@ attributetype (
     SINGLE-VALUE
     )
 
+attributetype: (
+    keystoneAttrs:5
+    NAME 'keystoneName'
+    EQUALITY caseExactMatch
+    SUBSTR caseExactSubstringsMatch
+    SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+    SINGLE-VALUE
+    )
+
+attributetype (
+    keystoneAttrs:6
+    NAME 'eppn'
+    DESC 'eduPerson per Internet2 and EDUCAUSE'
+    EQUALITY caseIgnoreMatch
+    SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+    SINGLE-VALUE
+    )
+
 objectClass (
     keystoneOCs:1
     NAME 'keystoneUidObject'
@@ -46,8 +64,8 @@ objectClass (
     NAME 'keystoneUser'
     SUP top
     AUXILIARY
-    MUST ( keystoneEnabled )
-    MAY ( mail $ userPassword )
+    MUST ( keystoneName $ keystoneEnabled )
+    MAY ( mail $ eppn $ userPassword )
     )
 
 objectClass (
@@ -64,7 +82,7 @@ objectClass (
     NAME 'keystoneTenant'
     SUP top
     AUXILIARY
-    MUST ( keystoneEnabled )
+    MUST ( keystoneName $ keystoneEnabled )
     MAY ( member $ description )
     )
 

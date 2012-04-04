@@ -1,0 +1,156 @@
+#!/usr/bin/env python
+#
+# Copyright 2011 National Institute of Informatics.
+#
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+
+import sys
+import os
+import hashlib
+from argparse import ArgumentParser
+from swift.common.utils import parse_options
+from swift.common import utils
+from swift.common.client import get_auth, Connection, ClientException
+from paste.deploy import appconfig
+from swift_ring_sync.internal_proxy import InternalProxy
+from webob import Request
+
+def put_rings(preauth_url, identity, password, container, ring_name, ring_file):
+    """ """
+    local_hash = None
+    with open(ring_file) as f:
+        local_hash = hashlib.md5(f.read()).hexdigest()
+    try:
+        storage_url, auth_token =  get_auth(preauth_url, identity, password)
+    except Exception, e:
+        return False, "authentification failed from %s: %s" % (preauth_url, e)
+    create_connection = lambda: Connection(preauth_url, identity, password, 
+                                           preauthurl=storage_url, 
+                                           preauthtoken=auth_token)
+    conn = create_connection()
+    try:
+        conn.head_container(container)
+    except ClientException:
+        print '%s: No such container, making...' % container
+        conn.put_container(container)
+    headers, obj_list = conn.get_container(container, prefix=ring_name)
+    if obj_list:
+        for obj in obj_list:
+            if obj['name'] == ring_name and obj['hash'] == local_hash:
+                return True, '%s: no need to update.' % ring_name
+    with open(ring_file) as f:
+        etag = conn.put_object(container, ring_name, f)
+    if etag == local_hash:
+        return True, '%s: update successfully.' % ring_name
+    else:
+        return False, '%s: fail to upload.' % ring_name
+
+def put_rings_with_noauth(internal_proxy, account_id, container, 
+                          ring_name, ring_file):
+    """ """
+    local_hash = None
+    with open(ring_file) as f:
+        local_hash = hashlib.md5(f.read()).hexdigest()
+    req = Request.blank('/v1/%s' % account_id,
+                        environ={'REQUEST_METHOD': 'GET'})
+    resp = internal_proxy._handle_request(req)
+    if resp.status_int == 404:
+        return False, '%s: account missing.' % account_id
+    obj_list = internal_proxy.get_container_list(account_id, container, 
+                                                 prefix=ring_name)
+    if obj_list:
+        for obj in obj_list:
+            if obj['name'] == ring_name and obj['hash'] == local_hash:
+                return True, '%s: no need to update.' % ring_name
+    with open(ring_file) as f:
+        resp = internal_proxy.upload_file(f, account_id, container, 
+                                          ring_name, compress=False, 
+                                          etag=local_hash)
+    if resp:
+        return True, '%s: update successfully.' % ring_name
+    else:
+        return False, '%s: fail to upload.' % ring_name
+
+def main(argv):
+    opts = ArgumentParser()
+    opts.add_argument('config_file')
+    args = opts.parse_args()
+
+    try:
+        ring_uploader_conf = utils.readconf(args.config_file, 'ring-uploader')
+    except Exception, e:
+        print '%s has invalid configuration.' % args.config_file
+        sys.exit(1)
+    container = ring_uploader_conf.get('container_name', 'rings')
+    ring_dir = ring_uploader_conf.get('ring_dir', '/etc/swift')
+    preauth_url = ring_uploader_conf.get('auth_url', '')
+    identity = ring_uploader_conf.get('identity', '')
+    password = ring_uploader_conf.get('password', '')
+    account_id = ring_uploader_conf.get('account_id', '')
+    proxy_server_conf = ring_uploader_conf.get('proxy_server_conf', 
+                                               '/etc/swift/proxy-server.conf')
+
+    internal_proxy = None
+    if account_id:
+        try:
+            int_proxy_conf = appconfig('config:%s' % proxy_server_conf, 
+                                       name='proxy-server')
+            if int_proxy_conf.has_key('account_autocreate'):
+                int_proxy_conf['account_autocreate'] = 'false'
+        except Exception, e:
+            print "Warning trying to load config %s: %s" % (proxy_server_conf, e)
+            int_proxy_conf = {}
+        try:
+            internal_proxy = InternalProxy(int_proxy_conf)
+        except Exception, e:
+            print 'Warning internal proxy failed, go to external proxy: %s' % e
+
+    rings = ['account.ring.gz', 'container.ring.gz', 'object.ring.gz']
+    
+    results = []
+    for ring in rings:
+        ring_file = os.path.join(ring_dir, ring)
+        if os.access(ring_file, os.F_OK):
+            if internal_proxy and account_id:
+                try:
+                    result, mesg = put_rings_with_noauth(internal_proxy, 
+                                                         account_id, 
+                                                         container, ring, 
+                                                         ring_file)
+                    results.append(result)
+                except Exception, e:
+                    print 'Error trying get %s: %s' % (ring, e)
+                    sys.exit(1)
+            elif preauth_url and identity and password:
+                try:
+                    result, mesg = put_rings(preauth_url, identity, 
+                                             password, container, ring, 
+                                             ring_file)
+                    results.append(result)
+                except Exception, e:
+                    print 'Error trying get %s: %s' % (ring, e)
+                    sys.exit(1)
+            else:
+                print "No authentication informations, or it doesn't work on an swift server."
+                break
+            print mesg
+        else:
+            print '%s: No such file.' % ring_file
+            sys.exit(1)
+    if False in results:
+        sys.exit(1)
+    sys.exit(0)
+
+if __name__ == '__main__':
+    main(sys.argv)

@@ -1,0 +1,22 @@
+{% extends 'django_openstack/dash/base.html' %}
+
+{% block sidebar %}
+  {% with current_sidebar="images_metadata" %}
+    {{block.super}}
+  {% endwith %}
+{% endblock %}
+
+{% block page_header %}
+  {% url dash_images_metadata request.user.tenant_id as refresh_link %}
+  {# to make searchable false, just remove it from the include statement #}
+  {% include "django_openstack/common/_page_header.html" with title="Images Metadata" refresh_link=refresh_link searchable="true" %}
+{% endblock page_header %}
+
+{% block dash_main %}
+    {% include 'django_openstack/dash/images_metadata/_list.html' %}
+
+    <div class="dash_block wide form">
+    <p>
+    {% include 'django_openstack/dash/images_metadata/_upload_form.html' with form=upload_form %}
+    </div>
+{% endblock %}

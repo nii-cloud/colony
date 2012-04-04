@@ -135,6 +135,7 @@ class User(Base, KeystoneBase):
     name = Column(String(255), unique=True)
     password = Column(String(255))
     email = Column(String(255))
+    eppn = Column(String(255))
     enabled = Column(Integer)
     tenant_id = Column(Integer, ForeignKey('tenants.id'))
     roles = relationship(UserRoleAssociation, cascade="all")

@@ -10,12 +10,19 @@
       <div class='large-rounded' id='login'>
         {% include "_messages.html" %}
         {% include '_login.html' %}
-        <ul id='alternate_links'>
+        <ul id='alternate_links' align='center'>
           <li>&nbsp;</li>
           <li>&nbsp;</li>
+        <hr />
         </ul>
-        <div class="clear"></div>
+        <br />
+        <br />
+        <br />
+        {% if gakunin_configured %}
+          <div align="center"><a href="{{ gakunin_login_url }}">Sign In with GakuNin</a></div>
+        {% endif %}
       </div>
     </div>
+
   </body>
 </html>

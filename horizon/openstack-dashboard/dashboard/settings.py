@@ -69,6 +69,11 @@ TEMPLATE_CONTEXT_PROCESSORS = (
     'django_openstack.context_processors.tenants',
     'django_openstack.context_processors.regions',
     'django_openstack.context_processors.quantum',
+    'django_openstack.context_processors.image_metadata_glance',
+    'django_openstack.context_processors.compute',
+    'django_openstack.context_processors.gakunin',
+    'django_openstack.context_processors.gakunin_url',
+    'django_openstack.context_processors.swift_enable_access_to_other_account'
 )
 
 TEMPLATE_LOADERS = (
@@ -94,6 +99,11 @@ INSTALLED_APPS = (
     'django_openstack.templatetags',
     'mailer',
 )
+'''
+INSTALLED_APPS = (
+    'django.contrib.admin',
+)
+'''
 
 TEST_RUNNER = 'django_nose.NoseTestSuiteRunner'
 AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend',)
