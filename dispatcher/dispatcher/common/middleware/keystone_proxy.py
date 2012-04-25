@@ -1,3 +1,4 @@
+# coding=utf-8
 import simplejson as json
 from urlparse import urlparse, urlunparse
 from eventlet.green.httplib import HTTPConnection, HTTPResponse, HTTPSConnection
@@ -58,14 +59,16 @@ class KeystoneProxy(object):
         self.keystone_proxy_auth_path = conf.get('keystone_proxy_auth_path', 'auth')
         self.keystone_proxy_admin_path = conf.get('keystone_proxy_admin_path', 'admin')
         self.relay_rule = conf.get('relay_rule')
+        if not self.relay_rule:
+            raise ValueError, 'KeyStone Proxy relay_rule is NULL.'
         self.dispatcher_base_url = conf.get('dispatcher_base_url')
         if not self.dispatcher_base_url:
-            raise ValueError
+            raise ValueError, 'KeyStone Proxy dispatcher_base_url is NULL.'
         self.region_name = conf.get('region_name')
         if not self.region_name:
-            raise ValueError
-        self.keystone_auth_port = conf.get('keystone_auth_port', 5000)
-        self.keystone_admin_port = conf.get('keystone_admin_port', 35357)
+            raise ValueError, 'KeyStone Proxy region_name is NULL.'
+        self.keystone_auth_port = int(conf.get('keystone_auth_port', 5000))
+        self.keystone_admin_port = int(conf.get('keystone_admin_port', 35357))
         self.conn_timeout = float(conf.get('conn_timeout', 0.5))
         self.timeout = int(conf.get('timeout', 300))
         self.req_version_str = 'v[12]\.0'
@@ -85,14 +88,23 @@ class KeystoneProxy(object):
         ks_port = self.keystone_auth_port \
             if api_type == self.keystone_proxy_auth_path \
             else self.keystone_admin_port
-        resps = self.request_to_ks(req, self.loc.swift_of(loc_prefix), ks_port)
+        (succ_resps, fail_resps) = self.request_to_ks(req, self.loc.swift_of(loc_prefix), ks_port)
+        if len(succ_resps) == 0:
+            resp = fail_resps[0]
+            if isinstance(resp, HTTPException):
+                return resp(env, start_response)
+            start_response('%s %s' % (resp.status, resp.reason),  resp.getheaders())
+            return resp.read()
         if self.loc.is_merged(loc_prefix):
-            (body, header) = self.ks_merge_response(resps, loc_prefix)
+            try:
+                (body, header) = self.ks_merge_response(succ_resps, loc_prefix)
+            except Exception, err:
+                return HTTPServerError(body=err)(env, start_response)
             res = Response(status='200 OK')
             res.headerlist = header
             res.body = body
             return res(env, start_response)
-        resp = resps[0]
+        resp = succ_resps[0]
         start_response('%s %s' % (resp.status, resp.reason),  resp.getheaders())
         return resp.read()
 
@@ -133,7 +145,7 @@ class KeystoneProxy(object):
                         (host, port) = parsed.netloc.split(':')
                         headers = req.headers
                         if req.headers.has_key('Host'):
-                            headers['Host'] = host + ':' + port
+                            headers['Host'] = host + ':' + str(port)
                         if token:
                             headers['X-Auth-Token'] = token
                         if req.headers.has_key('Content-Length'):
@@ -148,12 +160,10 @@ class KeystoneProxy(object):
                             else:
                                 fail_resps.append(resp)
                 except ValueError, err:
-                    fail_resps.append(HTTPPreconditionFailed())
+                    fail_resps.append(HTTPPreconditionFailed(request=req))
                 except (Exception, TimeoutError), err:
-                    fail_resps.append(HTTPServiceUnavailable())
-        if len(succ_resps) != 0:
-            return succ_resps
-        return fail_resps
+                    fail_resps.append(HTTPServiceUnavailable(request=req))
+        return succ_resps, fail_resps
 
     def ks_merge_response(self, resps, loc_prefix):
         """ Merge JSON and HTTP headers from multiple KS servers.
@@ -167,7 +177,10 @@ class KeystoneProxy(object):
         header = self._merge_header(headers, loc_prefix)
         body = ''
         if len(bodies) != 0:
-            body = self._merge_body(bodies, loc_prefix)
+            try:
+                body = self._merge_body(bodies, loc_prefix)
+            except Exception, err:
+                raise KeyError, 'ks_merge_response: %s' % err
         return (body, header)
 
     def _combinate_ks_url(self, server, port, req):
@@ -272,7 +285,7 @@ class KeystoneProxy(object):
                                 swift_adminURLs.append(a_info['access']['serviceCatalog'][i]['endpoints'][j]['adminURL'])
                                 swift_internalURLs.append(a_info['access']['serviceCatalog'][i]['endpoints'][j]['internalURL'])
         except KeyError, err:
-            raise
+            raise KeyError, '_merge_body_access: %s' % err
         maccess = access[0]
         maccess['access']['token']['id'] = self._merge_auth_token(auth_tokens)
         for i in range(len(maccess['access']['serviceCatalog'])):
