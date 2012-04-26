@@ -32,6 +32,7 @@ setup(name='dispatcher',
             'metadata_glance=dispatcher.common.middleware.metadata_glance:filter_factory',
             'keystone_merge=dispatcher.common.middleware.keystone_merge:filter_factory',
             'swift3_for_colony=dispatcher.common.middleware.swift3:filter_factory',
+            'keystone_proxy=dispatcher.common.middleware.keystone_proxy:filter_factory',
             ],
         },
       )

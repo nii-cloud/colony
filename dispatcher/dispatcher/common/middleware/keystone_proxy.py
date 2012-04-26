@@ -84,7 +84,10 @@ class KeystoneProxy(object):
         req = Request(env)
         if not self.is_keystone_proxy_path(req):
             return self.app(env, start_response)
-        (loc_prefix, api_type) = self.location_api_check(req)
+        try:
+            (loc_prefix, api_type) = self.location_api_check(req)
+        except Exception:
+            return HTTPPreconditionFailed(body='invalid PATH')(env, start_response)
         ks_port = self.keystone_auth_port \
             if api_type == self.keystone_proxy_auth_path \
             else self.keystone_admin_port
@@ -123,7 +126,7 @@ class KeystoneProxy(object):
             loc_prefix = req.path.split('/')[2].strip()
             api_type = req.path.split('/')[3].strip()
         except:
-            pass
+            raise ValueError
         if re.match(self.req_version_str, api_type):
             api_type = loc_prefix
             return ('', api_type)
