@@ -82,6 +82,9 @@ class KeystoneProxy(object):
         """
         """
         req = Request(env)
+        self.loc.reload()
+        if self.loc.age == 0:
+            self.logger.warn('dispatcher relay rule is invalid, using old rules now.')
         if not self.is_keystone_proxy_path(req):
             return self.app(env, start_response)
         try:
