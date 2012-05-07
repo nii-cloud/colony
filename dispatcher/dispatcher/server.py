@@ -126,8 +126,11 @@ class RelayRequest(object):
                 if not self.headers.has_key('expect'):
                     self.headers['expect'] = '100-continue'
             chunked = self.req.headers.get('transfer-encoding')
-            reader = self.req.environ['wsgi.input'].read
-            data_source = iter(lambda: reader(self.chunk_size), '')
+            if isinstance(self.req.environ['wsgi.input'], str):
+                reader = self.req.environ['wsgi.input'].read
+                data_source = iter(lambda: reader(self.chunk_size), '')
+            else:
+                data_source = self.req.environ['wsgi.input']
             bytes_transferred = 0
             try:
                 conn = self._connect_put_node(host, port, self.method, path, 
@@ -476,7 +479,7 @@ class Dispatcher(object):
             return self._create_put_req(to_req, location, 
                                         cont_prefix, each_tokens, 
                                         from_real_path_ls[1], container, obj, query,
-                                        from_resp.body,
+                                        from_resp,
                                         from_resp.headers['content-length'])
         """
         if large object, split object and upload them.
@@ -738,7 +741,7 @@ class Dispatcher(object):
         return to_resp
 
     def _create_put_req(self, to_req, location, prefix, each_tokens, 
-                       account, cont, obj, query, body, to_size):
+                        account, cont, obj, query, resp, to_size):
         """ """
         to_swift_svrs = self.loc.servers_by_container_prefix_of(location, prefix)
         to_token = each_tokens[self._get_servers_subscript_by_prefix(location, prefix)]
@@ -751,10 +754,14 @@ class Dispatcher(object):
         if to_req.headers.has_key('x-copy-from'):
             del to_req.headers['x-copy-from'] 
         to_req.method = 'PUT'
-        if isinstance(body, file):
-            to_req.body_file = body
+        if isinstance(resp, file):
+            to_req.body_file = resp
+        elif isinstance(resp, list):
+            to_req.environ['wsgi.input'] = iter(resp)
+        elif isinstance(resp, Response):
+            to_req.environ['wsgi.input'] = iter(resp.app_iter)
         else:
-            to_req.body = body
+            to_req.body = resp
         to_resp = self.relay_req(to_req, to_url,
                                  to_real_path_ls,
                                  to_swift_svrs,
