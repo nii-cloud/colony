@@ -494,6 +494,8 @@ class Dispatcher(object):
                                            from_real_path_ls[1], seg_cont)
         if cont_resp.status_int != 201 and cont_resp.status_int != 202:
             return cont_resp
+        chunk_top = 0
+        chunk_bottm = 0
         for seg in range(max_segment):
             """ 
             <name>/<timestamp>/<size>/<segment> 
@@ -502,15 +504,21 @@ class Dispatcher(object):
             split_obj = '%s/%s/%s/%08d' % (obj, cur, obj_size, seg)
             split_obj_name = quote(split_obj)
             chunk = body.read(self.swift_store_large_chunk_size)
+            if obj_size >= chunk_top:
+                chunk_bottom += self.swift_store_large_chunk_size
+            # else:
+            #     break
             to_resp = self._create_put_req(to_req, location, 
                                            cont_prefix, each_tokens, 
                                            from_real_path_ls[1], seg_cont, 
                                            split_obj_name, None,
+                                           # from_resp.app_iter[chunk_top:chunk_bottom],
                                            chunk,
                                            len(chunk))
             if to_resp.status_int != 201:
                 body.close() 
                 return self.check_error_resp([to_resp])
+            chunk_top += self.swift_store_large_chunk_size
         # upload object manifest
         body.close() 
         to_req.headers['x-object-manifest'] = '%s/%s/%s/%s/' % (seg_cont, obj, cur, obj_size)
