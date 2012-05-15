@@ -55,6 +55,7 @@ class KeystoneProxy(object):
         """ """
         self.app = app
         self.conf = conf
+        self.logger = get_logger(conf, log_route='keystone_proxy')
         self.keystone_proxy_common_path = conf.get('keystone_proxy_common_path', '/ks')
         self.keystone_proxy_auth_path = conf.get('keystone_proxy_auth_path', 'auth')
         self.keystone_proxy_admin_path = conf.get('keystone_proxy_admin_path', 'admin')
