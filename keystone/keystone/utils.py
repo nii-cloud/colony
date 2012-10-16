@@ -145,7 +145,7 @@ def send_legacy_result(code, headers):
 import eventlet
 def task_switch(timeout=0):
     eventlet.greenthread.sleep(timeout)
-     
+
 def import_module(module_name, class_name=None):
     '''Import a class given a full module.class name or seperate
     module and options. If no class_name is given, it is assumed to

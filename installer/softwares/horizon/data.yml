@@ -43,17 +43,17 @@ config_item_defaults:
   - name: login_redirect_url
     value: "/horizon/auth/login"
   - name: media_url
-    value: "/horizon/media"
+    value: "/horizon/media/"
   - name: static_url
-    value: "/horizon/static"
+    value: "/horizon/static/"
   - name: admin_media_url
-    value: "/horizon/static/admin"
+    value: "/horizon/static/admin/"
 
 
 component_config_defaults:
-  - path: /usr/local/share/dash/local/local_settings.py
+  - path: /etc/horizon/local/local_settings.py
     component: colony_horizon
-  - path: /usr/local/share/dash/dashboard/settings.py
+  - path: /etc/horizon/dashboard/settings.py
     component: colony_horizon
 
 software_config_defaults:
