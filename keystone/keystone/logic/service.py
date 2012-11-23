@@ -347,6 +347,22 @@ class IdentityService(object):
         duser.tenant_id = user.tenant_id
         duser = api.USER.create(duser)
         user.id = duser.id
+
+        # create credentilas
+        dcreds = models.Credentials()
+        dtenant = api.TENANT.get_user_tenants(user.id)
+
+        if dtenant:
+            dcreds.key = dtenant[0].name + ":" + user.name
+        else:
+            dcreds.key = user.name
+
+        dcreds.user_id = user.id
+        dcreds.tenant_id = user.tenant_id
+        dcreds.type = "EC2"
+        dcreds.secret = user.password
+        api.CREDENTIALS.create(dcreds)
+
         return user
 
     def validate_and_fetch_user_tenant(self, tenant_id):
@@ -480,6 +496,10 @@ class IdentityService(object):
 
         api.USER.update(user_id, values)
 
+        dtenant = api.TENANT.get_user_tenants(user_id)
+        secret = {'secret': user.password}
+        api.CREDENTIALS.update_secret(dtenant[0].name + ":" + duser.name, secret)
+
         return User_Update(password=user.password)
 
     def enable_disable_user(self, admin_token, user_id, user):
@@ -527,8 +547,13 @@ class IdentityService(object):
         dtenant = api.TENANT.get(duser.tenant_id)
         if dtenant != None:
             api.USER.delete_tenant_user(user_id, dtenant.id)
+            cred = api.CREDENTIALS.get_by_access(dtenant.name + ":" +  duser.name)
         else:
             api.USER.delete(user_id)
+            cred = api.CREDENTIALS.get_by_access(duser.name)
+
+        api.CREDENTIALS.delete(cred.id)
+
         return None
 
     def __get_auth_data(self, dtoken):

@@ -29,7 +29,7 @@ class CredentialsAPI(BaseCredentialsAPI):
     def get(self, id, session=None):
         if not session:
             session = get_session()
-        result = session.query(models.Group).filter_by(id=id).first()
+        result = session.query(models.Credentials).filter_by(id=id).first()
         return result
 
     def get_by_access(self, access, session=None):
@@ -42,10 +42,15 @@ class CredentialsAPI(BaseCredentialsAPI):
     def delete(self, id, session=None):
         if not session:
             session = get_session()
-        with session.begin():
-            group_ref = self.get(id, session)
-            session.delete(group_ref)
+        session.query(models.Credentials).filter_by(id=id).delete()
 
+    def update_secret(self, access, secret, session=None):
+        if not session:
+            session = get_session()
+        with session.begin():
+            cred_ref = self.get_by_access(access, session)
+            cred_ref.update(secret)
+            cred_ref.save(session=session)
 
 def get():
     return CredentialsAPI()

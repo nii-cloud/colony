@@ -24,6 +24,7 @@ import sys
 import time
 from cStringIO import StringIO
 from uuid import uuid4
+from xml.dom.minidom import getDOMImplementation, parseString
 
 class RelayRequest(object):
     """ """
@@ -125,8 +126,11 @@ class RelayRequest(object):
                 if not self.headers.has_key('expect'):
                     self.headers['expect'] = '100-continue'
             chunked = self.req.headers.get('transfer-encoding')
-            reader = self.req.environ['wsgi.input'].read
-            data_source = iter(lambda: reader(self.chunk_size), '')
+            if isinstance(self.req.environ['wsgi.input'], str):
+                reader = self.req.environ['wsgi.input'].read
+                data_source = iter(lambda: reader(self.chunk_size), '')
+            else:
+                data_source = self.req.environ['wsgi.input']
             bytes_transferred = 0
             try:
                 conn = self._connect_put_node(host, port, self.method, path, 
@@ -475,7 +479,7 @@ class Dispatcher(object):
             return self._create_put_req(to_req, location, 
                                         cont_prefix, each_tokens, 
                                         from_real_path_ls[1], container, obj, query,
-                                        from_resp.body,
+                                        from_resp,
                                         from_resp.headers['content-length'])
         """
         if large object, split object and upload them.
@@ -490,6 +494,8 @@ class Dispatcher(object):
                                            from_real_path_ls[1], seg_cont)
         if cont_resp.status_int != 201 and cont_resp.status_int != 202:
             return cont_resp
+        chunk_top = 0
+        chunk_bottm = 0
         for seg in range(max_segment):
             """ 
             <name>/<timestamp>/<size>/<segment> 
@@ -498,15 +504,21 @@ class Dispatcher(object):
             split_obj = '%s/%s/%s/%08d' % (obj, cur, obj_size, seg)
             split_obj_name = quote(split_obj)
             chunk = body.read(self.swift_store_large_chunk_size)
+            if obj_size >= chunk_top:
+                chunk_bottom += self.swift_store_large_chunk_size
+            # else:
+            #     break
             to_resp = self._create_put_req(to_req, location, 
                                            cont_prefix, each_tokens, 
                                            from_real_path_ls[1], seg_cont, 
                                            split_obj_name, None,
+                                           # from_resp.app_iter[chunk_top:chunk_bottom],
                                            chunk,
                                            len(chunk))
             if to_resp.status_int != 201:
                 body.close() 
                 return self.check_error_resp([to_resp])
+            chunk_top += self.swift_store_large_chunk_size
         # upload object manifest
         body.close() 
         to_req.headers['x-object-manifest'] = '%s/%s/%s/%s/' % (seg_cont, obj, cur, obj_size)
@@ -737,7 +749,7 @@ class Dispatcher(object):
         return to_resp
 
     def _create_put_req(self, to_req, location, prefix, each_tokens, 
-                       account, cont, obj, query, body, to_size):
+                        account, cont, obj, query, resp, to_size):
         """ """
         to_swift_svrs = self.loc.servers_by_container_prefix_of(location, prefix)
         to_token = each_tokens[self._get_servers_subscript_by_prefix(location, prefix)]
@@ -750,10 +762,14 @@ class Dispatcher(object):
         if to_req.headers.has_key('x-copy-from'):
             del to_req.headers['x-copy-from'] 
         to_req.method = 'PUT'
-        if isinstance(body, file):
-            to_req.body_file = body
+        if isinstance(resp, file):
+            to_req.body_file = resp
+        elif isinstance(resp, list):
+            to_req.environ['wsgi.input'] = iter(resp)
+        elif isinstance(resp, Response):
+            to_req.environ['wsgi.input'] = iter(resp.app_iter)
         else:
-            to_req.body = body
+            to_req.body = resp
         to_resp = self.relay_req(to_req, to_url,
                                  to_real_path_ls,
                                  to_swift_svrs,
@@ -827,6 +843,22 @@ class Dispatcher(object):
                     e['name'] = prefix + self.combinater_char + e['name']
                     merge_body.append(e)
             return json.dumps(merge_body)
+        elif content_type.startswith('application/xml'):
+            impl = getDOMImplementation()
+            merge_body = impl.createDocument(None, None, None)
+            acct = merge_body.createElement("account")
+            merge_body.appendChild(acct)
+            for prefix, body in zip(prefixes, bodies):
+                dom = parseString(body)
+                p_emt = dom.getElementsByTagName('account')[0]
+                acct_name = p_emt.getAttribute('name')
+                acct.setAttribute('name', acct_name)
+                for emt in p_emt.getElementsByTagName('container'):
+                    orig_name = emt.getElementsByTagName('name').item(0).childNodes[0].data
+                    new_name = '%s:%s' % (prefix, orig_name)
+                    emt.getElementsByTagName('name').item(0).childNodes[0].data = new_name
+                    acct.appendChild(emt)
+            return merge_body.toxml('UTF-8')
         else:
             pass
 
